@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Env / secrets
+.env
+*.key
+
+# Output artifacts
+output/
+*.png
+*.zip
+uploads/
+*.db
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
