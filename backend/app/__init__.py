@@ -1,0 +1,1 @@
+"""StudyReel backend application package."""

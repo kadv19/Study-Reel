@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "studyreel"
+version = "0.1.0"
+description = "StudyReel Instagram Carousel Generation & Rendering Engine"
+authors = [{ name = "StudyReel Team" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+    "jinja2>=3.1.0",
+    "playwright>=1.40.0",
+    "pillow>=10.0.0",
+    "pygments>=2.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

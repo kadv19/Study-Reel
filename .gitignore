@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.pytest_temp/
+.test_scratch/
+*.egg-info/
+dist/
+build/
+demo_output/
