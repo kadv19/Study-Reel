@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-[#080c14]">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, height=1350, initial-scale=1.0">
+  <title>{{ topic.title }} - Slide {{ slide.slide_number }}</title>
+  <style>
+    {{ fonts_css | safe }}
+    {{ tailwind_css | safe }}
+  </style>
+</head>
+<body class="m-0 p-0 w-[1080px] h-[1350px] overflow-hidden bg-[#080c14] text-slate-100 antialiased select-none">
+  <!-- Slide 1080x1350 Canvas -->
+  <div class="slide-container relative w-[1080px] h-[1350px] bg-[#080c14] text-slate-100 flex flex-col justify-between p-14 tech-grid overflow-hidden">
+    
+    <!-- Ambient Background Glows -->
+    <div class="radial-glow absolute inset-0 pointer-events-none z-0"></div>
+    <div class="absolute -top-32 -right-32 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-32 -left-32 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- Top Navigation / Brand Bar -->
+    <header class="relative z-10 flex items-center justify-between border-b border-slate-800/80 pb-6">
+      <!-- Left: Language & Topic Badges -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-cyan-500/30 text-cyan-400 text-sm font-semibold tracking-wide uppercase font-mono shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+          {{ slide.language.value if slide.language else topic.language.value }}
+        </div>
+        {% if topic.difficulty %}
+        <span class="px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-xs font-medium uppercase tracking-wider">
+          {{ topic.difficulty }}
+        </span>
+        {% endif %}
+      </div>
+
+      <!-- Center / Right: Brand & Slide Indicator -->
+      <div class="flex items-center gap-4">
+        <!-- Slide Counter -->
+        <div class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-slate-700/80 text-slate-300 font-mono text-sm font-semibold tracking-wider">
+          <span class="text-cyan-400">{{ "%02d" % (slide.slide_number or 1) }}</span>
+          <span class="text-slate-600">/</span>
+          <span class="text-slate-400">{{ "%02d" % (slide.total_slides or 1) }}</span>
+        </div>
+
+        <!-- Brand Mark -->
+        <div class="flex items-center gap-2 font-bold tracking-tight text-white text-base">
+          <div class="w-6 h-6 rounded-md bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-white text-xs font-mono shadow-glow-cyan">
+            SR
+          </div>
+          <span>Study<span class="text-cyan-400">Reel</span></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="relative z-10 flex-1 flex flex-col justify-center my-6 overflow-hidden">
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer Bar -->
+    <footer class="relative z-10 border-t border-slate-800/80 pt-6 flex items-center justify-between text-slate-400 text-sm font-medium">
+      <!-- Left: Handle / Watermark -->
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">⚡</span>
+        <span class="text-slate-300 font-medium">{{ carousel_author or 'StudyReel' }}</span>
+        <span class="text-slate-600">•</span>
+        <span class="text-slate-400 text-xs truncate max-w-[400px]">{{ topic.title }}</span>
+      </div>
+
+      <!-- Right: Action / Swipe Cue -->
+      <div class="flex items-center gap-2 text-cyan-400 font-semibold tracking-wide">
+        {% if slide.slide_number == slide.total_slides %}
+        <span>Save & Share 🔖</span>
+        {% else %}
+        <span>Swipe next →</span>
+        {% endif %}
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>

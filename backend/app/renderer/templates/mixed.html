@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex flex-col justify-between h-full py-2 max-w-[980px] mx-auto w-full gap-4">
+
+  <!-- Header -->
+  <div class="space-y-1">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs uppercase tracking-wider">
+      <span>Explanation & Syntax</span>
+    </div>
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight break-word-safe">
+      {{ slide.header }}
+    </h1>
+  </div>
+
+  <!-- Body Explanation Card -->
+  <div class="glass-card-glow rounded-xl p-5 relative overflow-hidden">
+    <div class="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-cyan-400 to-indigo-500"></div>
+    <p class="text-lg sm:text-xl text-slate-200 font-normal leading-relaxed break-word-safe line-clamp-4">
+      {{ slide.body }}
+    </p>
+  </div>
+
+  <!-- Compact IDE / Code Window -->
+  <div class="flex-1 flex flex-col justify-center min-h-0">
+    <div class="rounded-xl overflow-hidden border border-slate-700/80 bg-[#0c121e] shadow-xl shadow-black/70 flex flex-col">
+      
+      <!-- IDE Window Title Bar -->
+      <div class="flex items-center justify-between px-4 py-2.5 bg-[#111927] border-b border-slate-800">
+        <!-- Traffic Light Buttons -->
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ff5f56]"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-[#27c93f]"></span>
+        </div>
+
+        <!-- Language Pill -->
+        <div class="px-2 py-0.5 rounded bg-slate-800 text-[11px] font-mono text-slate-400 uppercase">
+          {{ slide.language.value if slide.language else topic.language.value }}
+        </div>
+      </div>
+
+      <!-- Code Block Body -->
+      <div class="p-3.5 overflow-hidden bg-[#0a0f1a]">
+        {{ highlighted_code | safe }}
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Caption / Note -->
+  {% if slide.caption %}
+  <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center gap-2.5 text-slate-300 text-xs sm:text-sm">
+    <span class="text-indigo-400">💡</span>
+    <span class="break-word-safe line-clamp-2">{{ slide.caption }}</span>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

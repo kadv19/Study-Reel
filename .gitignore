@@ -20,3 +20,6 @@ uploads/
 .DS_Store
 .vscode/
 .idea/
+# Renderer
+backend/app/renderer/bin/
+render_preview_*.png
