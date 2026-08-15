@@ -17,7 +17,7 @@ from app.schemas import MicroTopic
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")  # backend/.env
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 SYSTEM_PROMPT = """You are a senior CSE professor creating micro-lessons for engineering students.
 
