@@ -36,9 +36,16 @@ backend/
 │   ├── engine/            # Gemini 2.5 client + cached, Pydantic-validated output
 │   ├── db/                # SQLite: syllabi, modules, carousels, pipeline_state
 │   └── renderer/          # (Sprint 3) Jinja2 + Tailwind + Playwright → PNG
-├── tests/                 # 20 tests: schemas, boundary, pipeline, API
+├── tests/                 # 25 tests: schemas, boundary, pipeline, API, regressions
 └── requirements.txt
 ```
+
+## Documentation
+
+Full project documentation is available in the `docs/` folder:
+- [docs/SETUP.md](../docs/SETUP.md) — Step-by-step setup guide for fresh machines.
+- [docs/API.md](../docs/API.md) — API endpoints, request/response models, and curl commands.
+- [docs/SPRINT_LOG.md](../docs/SPRINT_LOG.md) — Sprint tracking, shipped features, and meeting minutes.
 
 ## Data flow
 
@@ -59,11 +66,11 @@ POST /api/v1/syllabus/upload (PDF)
 ## Ownership map
 
 | Layer | Owner | Status |
-|-------|-------|--------|
-| Schemas (MicroTopic) | P1 (you) + P3 | ✅ done |
-| Ingestion layer | P1 | ✅ done (20/20 tests) |
+|---|---|---|
+| Schemas (MicroTopic) | P1 + P3 | ✅ done |
+| Ingestion layer | P1 | ✅ done (25/25 tests) |
 | SQLite | P1 | ✅ done |
 | FastAPI endpoints | P1 | ✅ done |
-| Gemini client | P2 | 🔲 interface ready, needs API key test |
-| Renderer | P3 | 🔲 Sprint 3 |
-| Dashboard | P4 | 🔲 Sprint 4 |
+| Gemini client | P2 | ✅ live-verified (genai SDK, gemini-3.5-flash, repair loop) |
+| Renderer | P3 | ✅ done (Jinja2 + Tailwind + Playwright, 31/31 tests) |
+| Dashboard & Docs | P4 | ✅ done (Streamlit UI & docs suite) |
