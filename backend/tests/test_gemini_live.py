@@ -61,7 +61,7 @@ evaluation, training and testing.
 @pytest.mark.parametrize("module_name,module_text", MODULES.items())
 def test_gemini_live(module_name, module_text):
     topics = generate_topics_for_module(module_text)
-
+    
     assert isinstance(topics, list)
     assert len(topics) > 0
 
