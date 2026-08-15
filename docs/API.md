@@ -107,10 +107,12 @@ curl -X POST "http://127.0.0.1:8000/api/v1/syllabus/upload" \
 
 ---
 
-## 4. Module Topics (Generation Hook)
+## 4. Module Topics (AI Generation)
 
 ### `GET /api/v1/modules/{module_number}/topics`
-Fetches generated micro-topics for a specific module number.
+Generates AI micro-topics for a stored module via the Gemini engine
+(gemini-3.6-flash). Requires a syllabus upload first. Drives pipeline
+state: `PROCESSING -> DONE` (or `FAILED`).
 
 #### Request
 ```bash
@@ -119,11 +121,19 @@ curl -X GET "http://127.0.0.1:8000/api/v1/modules/1/topics"
 
 #### Response (`200 OK`)
 ```json
-{
-  "module": 1,
-  "note": "Generation endpoint lands with the AI engine"
-}
+[
+  {
+    "header": "HTML Document Structure",
+    "body": "Every standard HTML5 document requires a DOCTYPE declaration...",
+    "code_block": "<!DOCTYPE html>\n<html>...",
+    "language_tag": "html"
+  }
+]
 ```
+
+#### Errors
+- `404` — module not found (upload a syllabus first)
+- `502` — Gemini generation failed (check `/api/v1/status` for details)
 
 ---
 

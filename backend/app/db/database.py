@@ -91,6 +91,25 @@ def save_carousel(
     return cur.lastrowid
 
 
+def get_module(module_number: int, db_path: str | Path | None = None) -> dict | None:
+    """Fetch the module with the given number from the most recent syllabus."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT m.id, m.module_number, m.topic_json
+            FROM modules m
+            JOIN syllabi s ON s.id = m.syllabus_id
+            WHERE m.module_number = ?
+            ORDER BY s.id DESC
+            LIMIT 1
+            """,
+            (module_number,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"id": row["id"], "module_number": row["module_number"], "module": json.loads(row["topic_json"])}
+
+
 def get_pipeline_state(db_path: str | Path | None = None) -> dict:
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM pipeline_state WHERE id = 1").fetchone()
