@@ -2,7 +2,14 @@
 
 import time
 import streamlit as st
-from api_client import check_backend_health, fetch_pipeline_status, upload_syllabus_pdf
+from api_client import (
+    check_backend_health,
+    export_carousel_zip,
+    fetch_module_topics,
+    fetch_pipeline_status,
+    render_carousel,
+    upload_syllabus_pdf,
+)
 
 st.set_page_config(page_title="StudyReel Admin Dashboard", page_icon="🎬", layout="wide")
 st.markdown("<style>.stApp{background-color:#0F172A;color:#F8FAFC}.slide-card{background:#182234;border:1px solid #3B82F6;border-radius:10px;padding:18px;}</style>", unsafe_allow_html=True)
@@ -27,10 +34,11 @@ with st.sidebar:
 if "syllabus" not in st.session_state:
     st.session_state["syllabus"] = None
 if "micro_topics" not in st.session_state:
-    st.session_state["micro_topics"] = [
-        {"header": "1. Introduction", "body": "Overview of foundational computing principles.", "code_block": None, "language_tag": None},
-        {"header": "2. Memory Models", "body": "Understanding shared vs distributed memory architectures.", "code_block": "int *ptr = malloc(sizeof(int)*10);", "language_tag": "c"},
-    ]
+    st.session_state["micro_topics"] = []
+if "active_module" not in st.session_state:
+    st.session_state["active_module"] = None
+if "carousel" not in st.session_state:
+    st.session_state["carousel"] = None
 
 tabs = st.tabs(["📥 Ingestion & Pipeline", "✏️ Manual Review (HITL)", "🎞️ Carousel Preview & Export"])
 
@@ -76,10 +84,26 @@ with tabs[0]:
             with st.expander(f"📦 {title} ({len(topics)} Topics)", expanded=True):
                 for idx, t in enumerate(topics, 1):
                     st.markdown(f"**{idx}.** {t}")
+                gen_btn = st.button(
+                    f"🤖 Generate AI Topics for {title}",
+                    key=f"gen_{mod.get('module_number')}",
+                    type="primary",
+                )
+                if gen_btn:
+                    try:
+                        with st.spinner(f"Calling Gemini for {title} (45-90s)..."):
+                            generated = fetch_module_topics(api_url, mod.get("module_number"))
+                        st.session_state["micro_topics"] = generated
+                        st.session_state["active_module"] = title
+                        st.success(f"✅ {len(generated)} micro-topics generated — review them in the Manual Review tab!")
+                    except Exception as exc:
+                        st.error(f"Generation failed: {exc}")
 
 with tabs[1]:
     st.subheader("Manual Review & Approval (Human-In-The-Loop)")
     topics = st.session_state["micro_topics"]
+    if not topics:
+        st.info("ℹ️ No topics yet — upload a syllabus and click 'Generate AI Topics' on a module in the Ingestion tab.")
     for i, t in enumerate(topics):
         with st.expander(f"Slide {i+1}: {t.get('header', 'Untitled')}", expanded=True):
             col_a, col_b = st.columns([1, 1])
@@ -93,9 +117,11 @@ with tabs[1]:
             topics[i]["code_block"] = new_c.strip() if new_c.strip() else None
             topics[i]["language_tag"] = new_lang if new_lang else None
 
-    if st.button("💾 Save & Approve Topics", type="primary"):
-        st.session_state["micro_topics"] = topics
-        st.success("✅ MicroTopics approved and ready for Sprint 3 renderer dispatch!")
+    if topics:
+        if st.button("💾 Save & Approve Topics", type="primary"):
+            st.session_state["micro_topics"] = topics
+            st.session_state["carousel"] = None
+            st.success(f"✅ {len(topics)} MicroTopics approved — render them in the Export tab!")
 
 with tabs[2]:
     st.subheader("Carousel Visual Preview & Export")
@@ -114,10 +140,35 @@ with tabs[2]:
             """,
             unsafe_allow_html=True,
         )
-    st.markdown("<br>", unsafe_allow_html=True)
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        st.button("📦 Download Carousel ZIP", disabled=True, help="Activated when Sprint 4 export endpoints land")
-        st.caption("ℹ️ *Full ZIP export activates when Sprint 4 renderer export endpoint is connected.*")
-    with c2:
-        st.download_button(label="📄 Export Approved Topics (JSON)", data=str(st.session_state["micro_topics"]), file_name="studyreel_approved_topics.json", mime="application/json")
+        st.markdown("<br>", unsafe_allow_html=True)
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            module_name = st.session_state.get("active_module") or "Module 1"
+            render_topics = preview_topics[:10]
+            if len(preview_topics) > 10:
+                st.warning(f"ℹ️ Instagram allows max 10 slides — rendering first 10 of {len(preview_topics)} topics.")
+            if st.button("🎨 Render Carousel (PNG slides)", type="primary", disabled=not preview_topics):
+                try:
+                    with st.spinner(f"Rendering {len(render_topics)} slides via Playwright..."):
+                        st.session_state["carousel"] = render_carousel(api_url, module_name, render_topics)
+                    st.success(
+                        f"✅ Rendered {st.session_state['carousel']['slide_count']} slides "
+                        f"(id={st.session_state['carousel']['id']})"
+                    )
+                except Exception as exc:
+                    st.error(f"Render failed: {exc}")
+            if st.session_state.get("carousel"):
+                car = st.session_state["carousel"]
+                zip_bytes = export_carousel_zip(api_url, car["id"])
+                st.download_button(
+                    label=f"📦 Download Carousel ZIP ({car['slide_count']} slides)",
+                    data=zip_bytes,
+                    file_name=f"studyreel_carousel_{car['id']}.zip",
+                    mime="application/zip",
+                    type="primary",
+                )
+                st.caption(f"ℹ️ Carousel `{car['carousel_id']}` • slides: {', '.join(car['slides'])}")
+        with c2:
+            st.download_button(label="📄 Export Approved Topics (JSON)", data=str(st.session_state["micro_topics"]), file_name="studyreel_approved_topics.json", mime="application/json")
+    else:
+        st.info("ℹ️ Generate topics first — nothing to preview yet.")

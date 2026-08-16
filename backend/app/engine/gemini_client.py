@@ -19,6 +19,16 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")  # backend/.env
 
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+# Free-tier quotas are per-model (20 req/day each), so on RESOURCE_EXHAUSTED
+# we fail over to the next model in this list to multiply daily capacity.
+MODEL_FAILOVER = [
+    os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+]
+
 SYSTEM_PROMPT = """You are a senior CSE professor creating micro-lessons for engineering students.
 
 For the syllabus text provided, produce an array of micro-topics. Each micro-topic is a
@@ -98,7 +108,8 @@ class GeminiClient:
         raise RuntimeError(f"Gemini generation failed after retries+repairs: {last_exc}")
 
     def _generate(self, module_text: str, last_error: Optional[str]) -> list[dict]:
-        """One raw Gemini call; returns the parsed JSON payload."""
+        """One raw Gemini call; returns the parsed JSON payload. Fails over
+        across MODEL_FAILOVER models when the active model is quota-exhausted."""
         contents = module_text
         if last_error:
             contents = (
@@ -108,16 +119,26 @@ class GeminiClient:
                 f"Please correct the offending fields and return ONLY valid JSON "
                 f"conforming to the schema."
             )
-        resp = self.client.models.generate_content(
-            model=self.model,
-            contents=contents,
-            config={
-                "system_instruction": SYSTEM_PROMPT,
-                "temperature": 0.4,
-                "response_mime_type": "application/json",
-            },
-        )
-        return json.loads(resp.text)
+        start_idx = MODEL_FAILOVER.index(self.model) if self.model in MODEL_FAILOVER else 0
+        last_exc: Exception | None = None
+        for model in MODEL_FAILOVER[start_idx:]:
+            try:
+                resp = self.client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config={
+                        "system_instruction": SYSTEM_PROMPT,
+                        "temperature": 0.4,
+                        "response_mime_type": "application/json",
+                    },
+                )
+                self.model = model  # pin the working model for subsequent calls
+                return json.loads(resp.text)
+            except Exception as exc:
+                last_exc = exc
+                if "429" not in str(exc) and "RESOURCE_EXHAUSTED" not in str(exc):
+                    raise  # non-quota errors are not failover-worthy
+        raise RuntimeError(f"All models quota-exhausted or failed: {last_exc}")
 
 
 def generate_topics_for_module(module_text: str, api_key: Optional[str] = None) -> list[MicroTopic]:

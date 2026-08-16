@@ -137,17 +137,59 @@ curl -X GET "http://127.0.0.1:8000/api/v1/modules/1/topics"
 
 ---
 
-## 5. Upcoming Sprint 4 Endpoints (Planned)
+## 5. Carousel Rendering & Export
+
+### `POST /api/v1/carousels/render`
+Renders approved (post-HITL) MicroTopics into 1080x1350 PNG slides via
+headless Playwright. Max 10 topics (Instagram carousel limit).
+
+#### Request
+```json
+{
+  "module_name": "Module 1: HTML & CSS",
+  "subject_code": "21CS51",
+  "topics": [
+    {"header": "HTML Document Structure", "body": "...", "code_block": "...", "language_tag": "html"}
+  ]
+}
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "id": 1,
+  "carousel_id": "a1b2c3d4",
+  "module_name": "Module 1: HTML & CSS",
+  "slide_count": 9,
+  "output_dir": ".../renders/a1b2c3d4",
+  "slides": ["slide_01.png", "..."]
+}
+```
+
+#### Errors
+- `422` — more than 10 topics, or invalid MicroTopic
+- `500` — Playwright rendering failed
+
+### `GET /api/v1/carousels/{carousel_id}/export`
+Downloads the rendered carousel as a ZIP of `slide_XX.png` files.
+
+```bash
+curl -OJ "http://127.0.0.1:8000/api/v1/carousels/1/export"
+```
+
+#### Errors
+- `404` — carousel not found or slides missing
+
+---
+
+## 7. Upcoming Sprint 4 Endpoints (Planned)
 
 ### `POST /api/v1/carousels/generate`
 Triggers Gemini micro-topic generation for extracted modules.
 
-### `GET /api/v1/carousels/{carousel_id}/export`
-Downloads a packaged ZIP archive containing rendered 1080x1350 PNG slides.
-
 ---
 
-## 6. Core Data Schemas
+## 8. Core Data Schemas
 
 ### `MicroTopic`
 | Field | Type | Rules / Constraints |

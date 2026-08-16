@@ -110,6 +110,22 @@ def get_module(module_number: int, db_path: str | Path | None = None) -> dict | 
     return {"id": row["id"], "module_number": row["module_number"], "module": json.loads(row["topic_json"])}
 
 
+def get_carousel(carousel_id: int, db_path: str | Path | None = None) -> dict | None:
+    """Fetch a stored carousel by id (carousel_json + output_dir)."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, carousel_json, output_dir FROM carousels WHERE id = ?",
+            (carousel_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "carousel": json.loads(row["carousel_json"]),
+        "output_dir": row["output_dir"],
+    }
+
+
 def get_pipeline_state(db_path: str | Path | None = None) -> dict:
     with _connect(db_path) as conn:
         row = conn.execute("SELECT * FROM pipeline_state WHERE id = 1").fetchone()
