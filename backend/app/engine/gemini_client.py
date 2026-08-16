@@ -29,6 +29,11 @@ MODEL_FAILOVER = [
     "gemini-flash-lite-latest",
 ]
 
+# Local fallback via Ollama — unlimited, no quota. Used when every Gemini
+# model is quota-exhausted (free tier is 20 req/day per model).
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+
 SYSTEM_PROMPT = """You are a senior CSE professor creating micro-lessons for engineering students.
 
 For the syllabus text provided, produce an array of micro-topics. Each micro-topic is a
@@ -138,7 +143,48 @@ class GeminiClient:
                 last_exc = exc
                 if "429" not in str(exc) and "RESOURCE_EXHAUSTED" not in str(exc):
                     raise  # non-quota errors are not failover-worthy
-        raise RuntimeError(f"All models quota-exhausted or failed: {last_exc}")
+        return self._generate_ollama(contents)
+
+    def _generate_ollama(self, contents: str) -> list[dict]:
+        """Fallback to a local Ollama model when Gemini quota is exhausted."""
+        try:
+            import requests
+        except ImportError as exc:
+            raise RuntimeError(
+                "All Gemini models quota-exhausted and `requests` unavailable for Ollama fallback"
+            ) from exc
+
+        user_prompt = (
+            f"{contents}\n\n"
+            f"Respond with ONLY a JSON object of the form {{\"topics\": [ ... ] }}. "
+            f"Each element of the array must have exactly these keys: header "
+            f"(string, max 30 chars), body (string, max 140 chars), code_block "
+            f"(string or null), language_tag (string or null)."
+        )
+
+        try:
+            resp = requests.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "stream": False,
+                    "format": "json",
+                    "options": {"temperature": 0.4},
+                },
+                timeout=300,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            self.model = f"ollama:{OLLAMA_MODEL}"  # pin for diagnostics
+            return json.loads(payload["message"]["content"])["topics"]
+        except Exception as exc:
+            raise RuntimeError(
+                f"Gemini quota exhausted and Ollama fallback failed: {exc}"
+            ) from exc
 
 
 def generate_topics_for_module(module_text: str, api_key: Optional[str] = None) -> list[MicroTopic]:
