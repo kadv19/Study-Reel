@@ -19,23 +19,35 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")  # backend/.env
 
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-SYSTEM_PROMPT = """You are a senior CSE professor creating micro-lessons for engineering students.
+SYSTEM_PROMPT = """You are a senior CSE professor creating exam-focused micro-lessons for engineering students.
 
-For the syllabus text provided, produce an array of micro-topics. Each micro-topic is a
-self-contained lesson a student can absorb in 45-60 seconds of scrolling.
+For the syllabus text provided, produce an array of micro-topics. Each micro-topic must teach one clear, syllabus-supported concept that a student can absorb in 45-60 seconds of scrolling.
 
 Rules:
-- header: short slide title, max 30 characters.
-- body: concise explanation, max 140 characters, exam-focused.
-- code_block: optional, max 22 lines, max 62 characters per line.
-- language_tag: only use one of: python, java, cpp, c, js, sql, kotlin, go, bash, html, css.
-- Cover every technical topic in the text. Do not invent topics not present.
+- header: short, specific slide title, max 30 characters.
+- body: concise, exam-focused explanation, max 140 characters.
+- code_block: optional; include only when code directly improves understanding of the syllabus concept.
+- code_block: max 22 lines and max 62 characters per line.
+- language_tag: use only one of: python, java, cpp, c, js, sql, kotlin, go, bash, html, css.
+- Never use a language_tag that does not match the code_block.
+- When code is CSS, use language_tag "css"; when code is HTML, use "html". Do not label CSS as HTML.
+- If the syllabus requests a language not present in the language_tag whitelist, do not invent a different language; explain the concept without code.
+- Cover every important technical topic in the syllabus, but combine closely related subtopics when one micro-lesson can teach them clearly.
+- Keep each micro-topic focused on one concept; do not create generic filler slides.
+- Stay strictly within the supplied syllabus. Do not add frameworks, APIs, libraries, languages, methods, or concepts that are not supported by the syllabus text.
+- Prefer definitions, key characteristics, steps, comparisons, syntax, and exam-relevant facts over broad introductions.
+- For implementation topics, show a minimal example only when it is directly supported by the syllabus.
+- Do not claim details that are not stated or clearly implied by the supplied syllabus.
 - No preamble, no explanation, no markdown fence — output ONLY valid JSON.
 """
 
 
+CACHE_SCHEMA_VERSION = "v2"
+
+
 def _hash(text: str) -> str:
-    return hashlib.md5(text.encode()).hexdigest()
+    cache_input = f"{CACHE_SCHEMA_VERSION}:{text}"
+    return hashlib.md5(cache_input.encode()).hexdigest()
 
 
 class GeminiClient:
