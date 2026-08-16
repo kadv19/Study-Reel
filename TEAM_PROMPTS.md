@@ -1,6 +1,8 @@
 # StudyReel — Exact Prompts for P2, P3, P4 (AI-Assisted Setup)
 
-Give each teammate their copy-paste prompt. They must run these in order (Setup → Task prompts). The backend scaffold (P1's work) is already in place — **they must NOT recreate it**, only build on it.
+Give each teammate their copy-paste prompt. They must run these in order (Setup → Task prompts). Phase 1 (ingestion → Gemini → render → dashboard) is **COMPLETE and on main**. Phase 2 = the **standalone InstaClone** delivery app (mini-Instagram) + publish pipeline, so the project proves end-to-end delivery without Meta's Graph API app-review bottleneck. Real FB/IG becomes Phase 3 via a swap-in adapter.
+
+**They must NOT recreate anything that exists** — only build on it.
 
 ---
 
@@ -14,12 +16,18 @@ First, read these files THOROUGHLY before writing any code:
 1. backend/README.md — project overview and ownership map
 2. backend/app/schemas.py — THE CONTRACT. Every layer builds against these types.
 3. HANDOFF_OPENCLAW.md — current project state and gotchas
+4. docs/SPRINT_LOG.md — what shipped so far and meeting decisions
+
+Phase 1 is DONE: syllabus ingestion, Gemini engine (with quota failover +
+Ollama fallback), PNG renderer, Streamlit dashboard, 43 tests green.
 
 RULES:
 - Never edit schemas.py without asking P1.
-- Never recreate files that already exist.
+- Never edit files owned by another member (ownership map in backend/README.md).
+- Never recreate files that already exist — run `git pull --rebase` FIRST.
 - Keep every file under 150 lines; split if larger.
-- Run existing tests before and after your changes: `cd backend && .venv/bin/python -m pytest tests/ -v`
+- Run existing tests before and after your changes:
+  `cd backend && .venv/bin/python -m pytest tests/ -v`
 - Write code with docstrings. Zero comments otherwise.
 - If you don't understand something, ask me to walk you through it before changing it.
 ```
@@ -28,152 +36,140 @@ RULES:
 
 # 👨‍🔬 P2 — AI/ML Engine Prompt (Gemini + Content Quality)
 
-## Task 1: Validate the Gemini client (today)
+## ✅ Phase 1 (DONE — keep for viva defense)
+
+**Task 1 (done):** Gemini client live validation — `tests/test_gemini_live.py`, 5 modules, schema checks, `skipif` no key.
+
+**Task 2 (done):** Prompt tuning — exam-focused SYSTEM_PROMPT merged to main (`bf08683`), cache schema versioning `v2`, ≥85% slides scored 4+, 0 slides scored 1.
+
+## 🚀 Task 3: Post metadata generation — captions + hashtags (Phase 2)
 
 ```
-StudyReel backend has a Gemini client stub at backend/app/engine/gemini_client.py
-that I (P1) wrote but never tested against the real API — it's YOUR job.
+StudyReel Phase 2 adds a publish pipeline. After a carousel is rendered,
+we need Instagram-style post metadata so the content can be published to
+the standalone InstaClone feed (and later real Instagram).
 
-1. Create backend/.env from .env.example and put in your real GEMINI_API_KEY.
-2. Write a test script tests/test_gemini_live.py that:
-   - Calls generate_topics_for_module() with a REAL syllabus-like text
-   - Assertions: returns list[MicroTopic], all fields within schema limits,
-     no exception for a valid module text
-3. Run it. If Gemini output fails Pydantic validation, that's EXPECTED to
-   happen sometimes — investigate WHY and fix the system prompt in
-   gemini_client.py (SYSTEM_PROMPT constant) until validation passes
-   consistently across 5 different module texts.
+P1 is adding this contract to backend/app/schemas.py (do NOT edit it —
+but read it once it lands):
 
-KNOW THIS: the contract between engine and everything else is
-MicroTopic(header≤30, body≤140, code_block optional, language_tag in whitelist).
-My prompt may be too loose or too strict — tune it. Measure the validation
-failure rate across 5 modules. Report: pass rate, quality issues you see.
+    class PostMetadata(BaseModel):
+        caption: str = Field(..., max_length=2200)
+        hashtags: list[str] = Field(..., min_length=3, max_length=30)
+        cover_slide: int = Field(0, ge=0)   # best slide for the cover
 
-IMPORTANT: after this works, mark your test with @pytest.mark.skipif(no key)
-so the normal test suite still runs without a live API key.
-```
+YOUR JOB: add `generate_post_metadata(module_name, topics) -> PostMetadata`
+to backend/app/engine/post_metadata.py, following the EXACT same pattern as
+gemini_client.py (same SDK, same retry/repair loop, same Pydantic-guided
+output, same Ollama fallback).
 
-## Task 2: Prompt engineering + quality tuning (Sprint 2)
+Rules to encode in the prompt:
+- Caption: exam-relevant, 1-3 sentences + a question or hook line + CTA.
+  Must reference the module name and syllabus concepts. No emoji spam
+  (max 3 emoji), no hashtags inside the caption body.
+- Hashtags: max 30, from the module's actual concepts (e.g. #VTU, #CSE,
+  #DataStructures, #ExamPrep, #Shorts, #Coding) + a few trending generic
+  ones. No fabricated course codes.
+- cover_slide: index of the strongest slide (header quality, has code).
+  Rule of thumb: prefer a slide with code_block, else first slide.
 
-```
-You are tuning StudyReel's pedagogical prompt. Goal: Gemini 2.5 Flash must
-produce micro-lessons a student can absorb in 45-60 seconds of scrolling.
+Extend tests/test_gemini_live.py (or a new test_post_metadata.py) with the
+same live-test pattern. Validate against REAL module output from
+app/ingestion/pipeline.process_pdf on the two PDFs in examples/.
 
-Use the STUDY PDFS the team gives you (VTU CSE/ECE/ISE syllabi). For each:
-1. Run ingestion (app/ingestion/pipeline.process_pdf) to get clean module text
-2. Generate topics with the client
-3. Manually review EVERY slide and grade it: 5=perfect exam-focused, 3=generic,
-   1=hallucinated/wrong. Log grades in a markdown table.
-
-Iterate the SYSTEM_PROMPT until ≥85% of slides score 4 or higher, and NONE
-score 1. Document your final prompt and why each rule in it exists
-(one line per rule) — this is your viva defense material.
-
-Also implement the caching layer improvement: cache keyed by MD5 of the
-module text (already partially in the client — make it robust to schema
-changes by versioning the cache key).
+Report: pass rate, sample captions for 3 modules, and how you picked covers.
 ```
 
 ---
 
-# 🎨 P3 — Rendering + Tests Prompt (Jinja2/Tailwind/Playwright)
+# 🎨 P3 — Rendering + InstaClone App Prompt (Jinja2/Tailwind/Playwright)
 
-## Task 1: Carousel templates (Sprint 3)
+## ✅ Phase 1 (DONE — keep for viva defense)
 
-```
-StudyReel renders Instagram carousels (1080x1350 px) from MicroTopic data.
-The contract is in backend/app/schemas.py — read it first.
+**Task 1 (done):** `backend/app/renderer/` — templates (text/code/mixed, 1080×1350, dark theme, local woff2 fonts), `render_carousel()`, Playwright screenshots, `test_renderer.py`.
 
-Your job: build backend/app/renderer/ with:
-1. templates/ — Jinja2 HTML templates, one per slide_type:
-   - text.html (header + body, no code)
-   - code.html (header + Pygments-highlighted code + caption)
-   - mixed.html (shorter body above a compact code block)
-   Each template: 1080x1350 fixed size, dark technical theme matching
-   the brand vibe, Inter + Fira Code fonts imported from LOCAL
-   static/ folder (.woff2 files — never CDN).
-2. static/ — download Inter and Fira Code .woff2 and place here.
-3. render.py — function render_carousel(carousel: Carousel, out_dir) that
-   compiles templates with Tailwind (use standalone Tailwind CLI, NOT CDN),
-   loads HTML in headless Playwright, waits for fonts+layout stability,
-   screenshots each slide at device_scale_factor=2.
-4. A test tests/test_renderer.py that renders a sample Carousel and
-   asserts PNGs exist, are exactly 1080x1350, and non-blank.
+**Task 2 (done):** `tests/test_rendering_limits.py` overflow stress tests + schema edge-case unit tests.
 
-FIRST run `cd backend && .venv/bin/python -m playwright install chromium`
-(Playwright needs ITS OWN browser — system Chromium won't work).
-
-Constraints: text must never overflow the slide (schema already caps body
-at 140 chars — but wrap at ~28 chars/line with 16px font, and add
-line-clamping as a belt-and-braces).
-```
-
-## Task 2: Overflow stress tests + unit tests (Sprint 3)
+## 🚀 Task 3: The InstaClone app — mini-Instagram feed (Phase 2)
 
 ```
-Add a stress-test suite tests/test_rendering_limits.py:
-- Slide with 140-char body (max) → renders, no overflow
-- Code slide with 22 lines × 62 chars (schema max) → renders
-- Code slide with 1 giant word of 62 chars (no spaces) → renderer must not break layout
-- Text with emoji (fonts-noto-color-emoji fallback check)
-Each test: assert no horizontal scrollbar and PNG dimensions correct.
+Phase 2 delivers content through a STANDALONE Instagram-like app (no Meta
+API — that's Phase 3). Build it in a NEW top-level folder: instaclone/
 
-Also add unit tests for schemas.py edge cases I haven't covered:
-- MicroTopic with every allowed language tag
-- Carousel with exactly 10 slides (max) — what should the pipeline do?
-  Liase with P1 before deciding the carve-up behaviour.
+The contract between the publish pipeline and you (do NOT change it):
+
+    POST /api/posts           body: {"post_id": str, "slides": [{"slide_number": int,
+                              "image_path": str, "header": str}], "caption": str,
+                              "hashtags": [str], "cover_slide": int}
+                              -> 200 {"media_id": str, "feed_url": str}
+    POST /api/posts/{media_id}/interact   body: {"action": "like" | "view"}
+                              -> 200 {"likes": int, "views": int}
+    GET  /api/feed            -> list of posts (latest first) with like/view counts
+
+P1's Publisher (backend/app/publisher/instaclone.py) will CALL your API —
+you own instaclone/, P1 owns the publisher. Do not build both.
+
+YOUR JOB:
+1. instaclone/app.py — FastAPI server on port 8100 with the 3 endpoints
+   above. Storage: simple JSON file (instaclone/data/posts.json). No DB.
+2. instaclone/feed.html — an Instagram-style feed page: dark UI, each post
+   is a carousel card (cover slide shown first, click to cycle through
+   slides), caption + hashtags below (hashtags highlighted cyan), like
+   button with live count, view counter. Reuse the brand: Inter font,
+   same dark palette as the renderer templates.
+3. Serve feed.html at GET /feed (auto-refresh every 10s via fetch()).
+4. instaclone/tests/test_instaclone.py — API tests: create post, like it,
+   verify feed ordering and counts. Use FastAPI TestClient, no browser.
+
+Run it: `cd instaclone && python -m uvicorn app:app --port 8100`
+(The backend publisher talks to http://127.0.0.1:8100 — keep that default.)
+
+You may reuse PNGs from backend/renders/ for manual testing. Keep files
+under 150 lines each. This app is the DEMO CENTERPIECE — make it look good.
 ```
 
 ---
 
-# 📊 P4 — Dashboard + Documentation Prompt (Streamlit/UI)
+# 📊 P4 — Dashboard + Publish Queue Prompt (Streamlit/UI)
 
-## Task 1: Streamlit dashboard (Sprint 4)
+## ✅ Phase 1 (DONE — keep for viva defense)
 
-```
-StudyReel needs an admin dashboard to upload a syllabus PDF, watch the
-pipeline progress, and download the finished carousel ZIP.
+**Task 1 (done):** `dashboard/studyreel_dashboard.py` — ingestion, HITL review, carousel preview + ZIP export, wired to live backend.
 
-The API lives at backend/app/main.py. Endpoints that exist:
-- POST /api/v1/syllabus/upload (multipart PDF → Syllabus JSON)
-- GET /api/v1/status (pipeline state)
-More endpoints arrive in Sprint 4 (generation + carousel export) — design
-your client around these.
+**Task 2 (done):** `docs/` — API.md, SETUP.md, SPRINT_LOG.md maintained; meeting minutes.
 
-Build dashboard/studyreel_dashboard.py (Streamlit) with:
-1. st.file_uploader for the PDF
-2. "Run Pipeline" button → POST to backend, poll GET /status every 2s,
-   show st.progress(stages) driven by the pipeline state machine:
-   IDLE→PROCESSING→DONE/FAILED
-3. On DONE: display extracted module list (st.expander per module,
-   show topic strings)
-4. On FAILED: show the error message from the status endpoint
-5. Carousel preview + ZIP download button (works when Sprint 4
-   endpoints land — stub it gracefully until then)
-
-Font/UX: dark theme to match the brand. Keep the whole file under 250 lines.
-
-Run it: `cd backend && ../dashboard/venv/bin/streamlit run ...` — create a
-venv in dashboard/ and install streamlit + requests + httpx first.
-```
-
-## Task 2: Documentation + sprint tracking (ongoing)
+## 🚀 Task 3: Publish Queue UI + simulated account (Phase 2)
 
 ```
-You are StudyReel's documentation owner. Maintain:
-1. backend/README.md — keep the ownership map table fresh and update the
-   "Status" column as each layer lands (ask P1/P2/P3 before marking done).
-2. docs/ folder at repo root with:
-   - SETUP.md (how a fresh laptop runs everything: venv, deps, env file)
-   - API.md (every endpoint, request/response examples, with curl)
-   - SPRINT_LOG.md (append-only: date, sprint, what shipped, blockers)
-3. Meeting minutes: after every team meeting, summarize decisions into
-   SPRINT_LOG.md within 24h.
+Phase 2 lets the dashboard PUBLISH rendered carousels to the standalone
+InstaClone feed (mini-Instagram, Phase 3 will swap to real Meta API).
 
-Also build the "manual review" view in the dashboard: after generation,
-before rendering, the user should be able to approve/edit each MicroTopic.
-Ask P1 what the generation endpoint will return before building this —
-it's the P2/P1 integration point.
+P1 is adding these v2 endpoints to backend/app/main.py (do NOT recreate):
+    POST /api/v2/publish      body: {"carousel_id": int, "caption": str,
+                              "hashtags": [str], "schedule_at": str|null}
+                              -> 200 {"media_id": str, "feed_url": str, "status": "queued"|"published"}
+    GET  /api/v2/posts        -> list of published posts with status
+    POST /api/v2/oauth/connect   -> 200 {"token": str, "expires_at": str}  (SIMULATED)
+    POST /api/v2/oauth/revoke    -> 200
+
+YOUR JOB — extend dashboard/studyreel_dashboard.py (keep under 350 lines
+total; move helpers to dashboard/api_client.py):
+1. NEW "🚀 Publish" tab:
+   - After a carousel renders, a caption text area (pre-filled with a
+     template: module name + CTA), hashtag input, and "Publish Now" /
+     "Schedule" (datetime input) buttons.
+   - Call POST /api/v2/publish; show status chip: queued → published →
+     LINK to the InstaClone feed (st.markdown link to /feed).
+   - GET /api/v2/posts table: post_id, caption preview, status, likes,
+     views, feed link. Poll every 5s while any post is "queued".
+2. "🔗 Connect Account" section in the sidebar:
+   - "Connect (Simulated)" button → POST /api/v2/oauth/connect → show
+     token + expiry countdown. "Revoke" button → revoke. This proves the
+     OAuth UX without Meta approval.
+3. Keep existing tabs working. Ask P1 about /api/v2 response shapes
+   before hardcoding field names.
+
+Docs task: update docs/API.md with the v2 endpoints and docs/SPRINT_LOG.md
+with the Phase 2 kickoff decision (standalone InstaClone, then Meta).
 ```
 
 ---
@@ -190,10 +186,13 @@ it's the P2/P1 integration point.
 
 ---
 
-## ⚠️ Coordination Guardrails
+## ⚠️ Coordination Guardrails (Phase 2 edition)
 
-1. **schemas.py = no-go zone** unless P1 approves. It's the contract.
-2. **P2 and P3 integrate at `generate_topics`** — P2 owns the client + prompt, P3 owns rendering. The JSON schema is the handshake.
-3. **P4's dashboard polls `/api/v1/status`** — P1 keeps that endpoint stable; add fields, never remove.
-4. **Conflicts in git:** each member only touches their layer; `git pull --rebase` before every push.
-5. **If your AI tool gets stuck on the same problem twice** → screenshot/describe to P1 in a shared channel; don't silently brute-force it.
+1. **schemas.py = no-go zone** unless P1 approves. `PostMetadata` is P1's addition — read it, don't edit it.
+2. **P1 owns `backend/app/publisher/`** (Publisher protocol + InstaClonePublisher + Instagram stub). P3 owns `instaclone/`. The HTTP contract above is the handshake — never change it unilaterally.
+3. **P2 and P3 integrate at the caption + carousel boundary**: P2's `PostMetadata` feeds P3's feed post; `cover_slide` decides the cover.
+4. **P4's dashboard polls `/api/v1/status` AND `/api/v2/posts`** — P1 keeps those endpoints stable; add fields, never remove.
+5. **Ports:** backend 8000 (FastAPI), InstaClone 8100, dashboard 8501 (Streamlit). Never guess each other's ports.
+6. **Conflicts in git:** each member only touches their layer; `git pull --rebase` before every push. P3: `instaclone/` is YOURS alone.
+7. **Phase 3 (not yet):** swap `PUBLISHER=instaclone` → `PUBLISHER=instagram` in backend/.env. The Publisher interface makes this a config change, not a rewrite — keep your code behind the interface.
+8. **If your AI tool gets stuck on the same problem twice** → screenshot/describe to P1 in a shared channel; don't silently brute-force it.
