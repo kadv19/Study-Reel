@@ -1,4 +1,4 @@
-"""StudyReel Admin Dashboard — Syllabus Ingestion, Pipeline Monitor, Manual Review & Publish Queue."""
+"""StudyReel Admin Dashboard â€” Syllabus Ingestion, Pipeline Monitor, Manual Review & Publish Queue."""
 
 from __future__ import annotations
 
@@ -71,13 +71,13 @@ with st.sidebar:
     provider: str = v2_status.get("provider", "instaclone")
     if is_connected:
         st.markdown('<span class="chip-connected">? CONNECTED</span>', unsafe_allow_html=True)
-        st.caption(f"Provider: `{provider}` · {v2_status.get('posts_published', 0)} posts published")
+        st.caption(f"Provider: `{provider}` Â· {v2_status.get('posts_published', 0)} posts published")
         if st.session_state["oauth_token"]:
             tok = st.session_state["oauth_token"]
             try:
                 exp = datetime.fromisoformat(tok["expires_at"])
                 days_left = max(0, (exp - datetime.now(timezone.utc)).days)
-                st.caption(f"?? Token: `{tok['token'][:12]}…` · expires in **{days_left}d**")
+                st.caption(f"?? Token: `{tok['token'][:12]}â€¦` Â· expires in **{days_left}d**")
             except Exception:
                 pass
         if st.button("?? Revoke", key="btn_revoke", use_container_width=True):
@@ -154,7 +154,7 @@ with tabs[0]:
                             generated = fetch_module_topics(api_url, mod.get("module_number"))
                         st.session_state["micro_topics"] = generated
                         st.session_state["active_module"] = title
-                        st.success(f"? {len(generated)} micro-topics generated — review them in the Manual Review tab!")
+                        st.success(f"? {len(generated)} micro-topics generated â€” review them in the Manual Review tab!")
                     except Exception as exc:
                         st.error(f"Generation failed: {exc}")
 
@@ -162,7 +162,7 @@ with tabs[1]:
     st.subheader("Manual Review & Approval (Human-In-The-Loop)")
     topics = st.session_state["micro_topics"]
     if not topics:
-        st.info("?? No topics yet — upload a syllabus and click 'Generate AI Topics' on a module in the Ingestion tab.")
+        st.info("?? No topics yet â€” upload a syllabus and click 'Generate AI Topics' on a module in the Ingestion tab.")
     for i, t in enumerate(topics):
         with st.expander(f"Slide {i+1}: {t.get('header', 'Untitled')}", expanded=True):
             col_a, col_b = st.columns([1, 1])
@@ -180,7 +180,7 @@ with tabs[1]:
         if st.button("?? Save & Approve Topics", type="primary"):
             st.session_state["micro_topics"] = topics
             st.session_state["carousel"] = None
-            st.success(f"? {len(topics)} MicroTopics approved — render them in the Export tab!")
+            st.success(f"? {len(topics)} MicroTopics approved â€” render them in the Export tab!")
 
 with tabs[2]:
     st.subheader("Carousel Visual Preview & Export")
@@ -191,7 +191,7 @@ with tabs[2]:
         st.markdown(
             f"""
             <div class="slide-card">
-                <div style="font-size: 0.85rem; color: #94A3B8; text-transform: uppercase;">StudyReel • Slide {slide_idx+1}/{len(preview_topics)}</div>
+                <div style="font-size: 0.85rem; color: #94A3B8; text-transform: uppercase;">StudyReel â€¢ Slide {slide_idx+1}/{len(preview_topics)}</div>
                 <h2 style="color: #60A5FA; margin-top: 8px;">{active['header']}</h2>
                 <p style="font-size: 1.1rem; line-height: 1.6; color: #E2E8F0;">{active['body']}</p>
                 {"<div style='background: #020617; border: 1px solid #1E293B; border-radius: 6px; padding: 12px; font-family: monospace; color: #38BDF8;'><pre>" + active['code_block'] + "</pre></div>" if active.get('code_block') else ""}
@@ -205,7 +205,7 @@ with tabs[2]:
             module_name = st.session_state.get("active_module") or "Module 1"
             render_topics = preview_topics[:10]
             if len(preview_topics) > 10:
-                st.warning(f"?? Instagram allows max 10 slides — rendering first 10 of {len(preview_topics)} topics.")
+                st.warning(f"?? Instagram allows max 10 slides â€” rendering first 10 of {len(preview_topics)} topics.")
             if st.button("?? Render Carousel (PNG slides)", type="primary", disabled=not preview_topics):
                 try:
                     with st.spinner(f"Rendering {len(render_topics)} slides via Playwright..."):
@@ -217,11 +217,11 @@ with tabs[2]:
                 car = st.session_state["carousel"]
                 zip_bytes = export_carousel_zip(api_url, car["id"])
                 st.download_button(label=f"?? Download Carousel ZIP ({car['slide_count']} slides)", data=zip_bytes, file_name=f"studyreel_carousel_{car['id']}.zip", mime="application/zip", type="primary")
-                st.caption(f"?? Carousel `{car['carousel_id']}` • slides: {', '.join(car['slides'])}")
+                st.caption(f"?? Carousel `{car['carousel_id']}` â€¢ slides: {', '.join(car['slides'])}")
         with c2:
             st.download_button(label="?? Export Approved Topics (JSON)", data=str(st.session_state["micro_topics"]), file_name="studyreel_approved_topics.json", mime="application/json")
     else:
-        st.info("?? Generate topics first — nothing to preview yet.")
+        st.info("?? Generate topics first â€” nothing to preview yet.")
 
 with tabs[3]:
     st.subheader("?? Publish to InstaClone Feed")
@@ -231,12 +231,12 @@ with tabs[3]:
     else:
         module_name = st.session_state.get("active_module") or "Module 1"
         carousel_id: int = car["id"]
-        st.markdown(f"Publishing carousel **`{car['carousel_id']}`** · {car['slide_count']} slides · module: *{module_name}*")
+        st.markdown(f"Publishing carousel **`{car['carousel_id']}`** Â· {car['slide_count']} slides Â· module: *{module_name}*")
         st.divider()
         col_cap, col_hash = st.columns([3, 2])
         with col_cap:
             caption_default = (
-                f"?? {module_name} — key concepts you need to know! ??\n"
+                f"?? {module_name} â€” key concepts you need to know! ??\n"
                 f"Save this carousel for your next study session.\n"
                 f"Follow @StudyReel for daily CS content! ??"
             )
@@ -244,7 +244,7 @@ with tabs[3]:
         with col_hash:
             hashtag_str = st.text_input("Hashtags (comma-separated, no #)", value="studyreel, computerscience, coding, learntocode, techstudent", key="pub_hashtags")
             hashtags = [h.strip().lstrip("#") for h in hashtag_str.split(",") if h.strip()]
-            st.caption(f"{len(hashtags)} hashtag(s) · 3 minimum required")
+            st.caption(f"{len(hashtags)} hashtag(s) Â· 3 minimum required")
         st.divider()
         btn_col, sched_col = st.columns([1, 2])
         with btn_col:
@@ -290,7 +290,7 @@ with tabs[3]:
         posts = fetch_published_posts(api_url)
         has_queued = any(p.get("status") == "queued" for p in posts)
         if not posts:
-            st.info("No posts yet — publish a carousel above.")
+            st.info("No posts yet â€” publish a carousel above.")
         else:
             rows = []
             for p in posts:
@@ -299,7 +299,7 @@ with tabs[3]:
                     tags = json.loads(raw_tags) if isinstance(raw_tags, str) else raw_tags
                 except Exception:
                     tags = []
-                cap_preview = (p.get("caption") or "")[:60] + ("…" if len(p.get("caption") or "") > 60 else "")
+                cap_preview = (p.get("caption") or "")[:60] + ("â€¦" if len(p.get("caption") or "") > 60 else "")
                 rows.append({
                     "#": p.get("id"),
                     "Caption": cap_preview,
@@ -310,8 +310,8 @@ with tabs[3]:
             st.dataframe(rows, use_container_width=True, hide_index=True)
             for p in posts:
                 feed = p.get("feed_url") or "http://127.0.0.1:8100/feed"
-                st.markdown(f"  · `{p.get('media_id', '—')}` ? [?? Open feed]({feed})")
+                st.markdown(f"  Â· `{p.get('media_id', 'â€”')}` ? [?? Open feed]({feed})")
         if has_queued:
-            st.caption("? Posts still queued — auto-refreshing every 5s…")
+            st.caption("? Posts still queued â€” auto-refreshing every 5sâ€¦")
             time.sleep(5)
             st.rerun()
