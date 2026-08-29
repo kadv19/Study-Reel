@@ -11,6 +11,7 @@ venv/
 
 # Output artifacts
 output/
+renders/
 *.png
 *.zip
 uploads/
@@ -23,3 +24,6 @@ uploads/
 # Renderer
 backend/app/renderer/bin/
 render_preview_*.png
+
+# InstaClone runtime data (P3 owns; populated at runtime)
+instaclone/data/

@@ -24,8 +24,10 @@ from app.engine.gemini_client import generate_topics_for_module
 from app.ingestion.pipeline import process_pdf
 from app.renderer.render import render_carousel
 from app.schemas import Carousel, MicroTopic, Slide, Syllabus
+from app.api_v2 import router as api_v2_router, start_scheduler
 
-app = FastAPI(title="StudyReel Backend", version="0.2.0")
+app = FastAPI(title="StudyReel Backend", version="0.3.0")
+app.include_router(api_v2_router)
 
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
 RENDER_DIR = Path(__file__).resolve().parents[2] / "renders"
@@ -44,6 +46,7 @@ class CarouselRenderRequest(BaseModel):
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    start_scheduler()
 
 
 @app.get("/api/v1/health")

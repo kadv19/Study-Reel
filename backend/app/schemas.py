@@ -124,3 +124,36 @@ class PipelineStatus(BaseModel):
     stage: Optional[Literal["upload", "ingestion", "generation", "rendering"]] = None
     progress: float = Field(0.0, ge=0.0, le=1.0)
     message: str = ""
+
+
+# ---- Phase 2 publish contracts (owned by P1) -------------------------------
+
+
+class PostMetadata(BaseModel):
+    """Instagram-style caption + hashtags + cover selection for a Carousel.
+
+    Produced by P2's generate_post_metadata(); consumed by the Publisher.
+    """
+
+    caption: str = Field(..., max_length=2200, description="Post caption (hook + body + CTA)")
+    hashtags: list[str] = Field(
+        ..., min_length=3, max_length=30,
+        description="3-30 hashtags derived from the module's real concepts",
+    )
+    cover_slide: int = Field(0, ge=0, description="Index of the strongest slide to use as cover")
+
+    @field_validator("hashtags")
+    @classmethod
+    def _lower_strip(cls, v: list[str]) -> list[str]:
+        return [h.lower().lstrip("#").replace(" ", "") for h in v]
+
+
+class PublishRequest(BaseModel):
+    """Body for POST /api/v2/publish."""
+
+    carousel_id: int = Field(..., description="Carousel row id from the render endpoint")
+    caption: str = Field("", max_length=2200)
+    hashtags: list[str] = Field(default_factory=list)
+    schedule_at: Optional[str] = Field(
+        None, description="ISO datetime to publish later; omit for immediate publish"
+    )
