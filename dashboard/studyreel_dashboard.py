@@ -22,7 +22,7 @@ from api_client import (
     upload_syllabus_pdf,
 )
 
-st.set_page_config(page_title="StudyReel Admin Dashboard", page_icon="??", layout="wide")
+st.set_page_config(page_title="StudyReel Admin Dashboard", page_icon="🎬", layout="wide")
 st.markdown(
     """
     <style>
@@ -53,7 +53,7 @@ with st.sidebar:
     st.caption("Phase 1-4 Pipeline Control Panel")
     api_url = st.text_input("Backend API URL", value="http://127.0.0.1:8000").rstrip("/")
     if check_backend_health(api_url):
-        st.success("?? Backend Connected", icon="?")
+        st.success("✅ Backend Connected", icon="✅")
     else:
         st.error("?? Backend Offline (Start uvicorn)")
     st.divider()
