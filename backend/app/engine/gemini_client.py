@@ -112,7 +112,10 @@ class GeminiClient:
                 # If the model's JSON failed Pydantic validation, give it the
                 # error back and ask for a corrected response. This is the
                 # 'repair loop' — makes the pipeline self-healing.
-                if isinstance(exc, Exception) and "validation error" in str(exc).lower():
+                if (
+                    "validation error" in str(exc).lower()
+                    or isinstance(exc, json.JSONDecodeError)
+                ):
                     for _ in range(repair_attempts):
                         try:
                             raw = self._generate(module_text, last_error=str(exc))

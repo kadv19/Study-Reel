@@ -1,6 +1,14 @@
-"""API client helpers for communicating with the StudyReel FastAPI backend."""
+"""API client helpers for communicating with the StudyReel FastAPI backend.
+
+Phase 1 (v1) helpers handle ingestion, generation, rendering and export.
+Phase 2 (v2) helpers handle the publish pipeline: OAuth handshake, publish,
+scheduled posts and the published-posts ledger.
+"""
 
 import requests
+
+
+# ----------------------------- Phase 1 (v1) ---------------------------------
 
 
 def check_backend_health(base_url: str) -> bool:
@@ -57,3 +65,60 @@ def export_carousel_zip(base_url: str, carousel_id: int) -> bytes:
     if res.status_code == 200:
         return res.content
     raise RuntimeError(f"Export failed with status {res.status_code}: {res.text[:200]}")
+
+
+# ----------------------------- Phase 2 (v2) ---------------------------------
+
+
+def fetch_v2_status(base_url: str) -> dict:
+    """Publisher health: provider, OAuth connection, posts published count."""
+    try:
+        res = requests.get(f"{base_url}/api/v2/status", timeout=5)
+        return res.json() if res.status_code == 200 else {}
+    except Exception:
+        return {}
+
+
+def connect_oauth(base_url: str) -> dict:
+    """Simulated OAuth handshake -> returns {token, expires_at}."""
+    res = requests.post(f"{base_url}/api/v2/oauth/connect", timeout=10)
+    if res.status_code == 200:
+        return res.json()
+    raise RuntimeError(f"OAuth connect failed: {res.status_code} {res.text[:200]}")
+
+
+def revoke_oauth(base_url: str) -> dict:
+    """Revoke the simulated OAuth token."""
+    res = requests.post(f"{base_url}/api/v2/oauth/revoke", timeout=10)
+    if res.status_code == 200:
+        return res.json()
+    raise RuntimeError(f"OAuth revoke failed: {res.status_code} {res.text[:200]}")
+
+
+def publish_carousel(
+    base_url: str,
+    carousel_id: int,
+    caption: str,
+    hashtags: list[str],
+    schedule_at: str | None = None,
+) -> dict:
+    """Publish (or schedule) a rendered carousel to the active publisher."""
+    payload = {
+        "carousel_id": carousel_id,
+        "caption": caption,
+        "hashtags": hashtags,
+        "schedule_at": schedule_at,
+    }
+    res = requests.post(f"{base_url}/api/v2/publish", json=payload, timeout=60)
+    if res.status_code == 200:
+        return res.json()
+    raise RuntimeError(f"Publish failed: {res.status_code} {res.text[:200]}")
+
+
+def fetch_published_posts(base_url: str) -> list[dict]:
+    """List published/queued posts from the publisher ledger."""
+    try:
+        res = requests.get(f"{base_url}/api/v2/posts", timeout=10)
+        return res.json() if res.status_code == 200 else []
+    except Exception:
+        return []
