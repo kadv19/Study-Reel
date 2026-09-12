@@ -27,3 +27,18 @@ render_preview_*.png
 
 # InstaClone runtime data (P3 owns; populated at runtime)
 instaclone/data/
+
+# Card Catalog — keep handoff mockups
+!UI_UX/*.pdf
+!UI_UX/*.html
+
+# Docs figures — keep despite *.png
+!docs/figures/*.png
+!docs/figures/**/*.png
+
+# Test temp / report (never commit)
+.pytest_temp/
+.pytest_temp/**
+.~lock.*
+*.docx
+Copy*.pdf
