@@ -8,7 +8,8 @@ This guide walks through setting up the complete StudyReel development environme
 
 - **Python**: Version 3.11, 3.12, or 3.13
 - **Git**: For cloning and version control
-- **Google Gemini API Key**: (Required for Sprint 2 AI generation layer)
+- **Google Gemini API Key**: (Required for Sprint 2 AI generation layer — fallback template works without it)
+- **Ports free**: `8000` backend, `8100` InstaClone feed, `8501` dashboard
 
 ---
 
@@ -78,36 +79,54 @@ pip install -r requirements.txt
 
 ---
 
-## 5. Running the Application
+## 5. Running the Application — One Command
 
-### A. Start the Backend API (FastAPI)
-
-From the `backend/` directory:
+### Fastest: `./run.sh` (smooth, recommended)
+From repo root:
 ```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+chmod +x run.sh
+./run.sh
 ```
-- **API Base URL**: `http://127.0.0.1:8000`
-- **Interactive Swagger Docs**: `http://127.0.0.1:8000/docs`
-- **ReDoc**: `http://127.0.0.1:8000/redoc`
+- Seeds 8 discovery posts if `instaclone/data/posts.json` empty (AI/EV/Aero/CS trending)
+- Starts backend `8000`, InstaClone `8100`, dashboard `8501`
+- **Backend**: `http://127.0.0.1:8000/docs` — health `GET /api/v1/health`
+- **InstaClone Feed**: `http://127.0.0.1:8100/feed` — global trending (`?sort=trending|newest&tag=ai|ev|aerodynamics`), no per-user memory, auto-refresh 10s, swipe + filter chips
+- **Dashboard**: `http://127.0.0.1:8501` — syllabus PDF → Generate → Review → Render (auto-publishes to feed) — **feed-first**, download is optional `⬇️ ZIP` / `JSON`
+- Logs: `/tmp/studyreel_backend.log`, `/tmp/studyreel_instaclone.log`, `/tmp/studyreel_dashboard.log`
+- Stop: `kill $(cat /tmp/studyreel_*.pid)` or `pkill -f uvicorn; pkill -f streamlit`
 
-### B. Launch the Admin Dashboard (Streamlit)
-
-From the repo root or `dashboard/`:
+### Docker (downloadable, reproducible)
 ```bash
-streamlit run dashboard/studyreel_dashboard.py
+docker compose up --build
 ```
-- **Dashboard URL**: `http://localhost:8501`
+- Uses `backend/Dockerfile`, `instaclone/Dockerfile`, `dashboard/Dockerfile`
+- Same ports `8000/8100/8501`, env `INSTACLONE_URL` auto-wired
+
+### Manual (step-by-step)
+```bash
+# Backend
+cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# InstaClone (separate terminal, repo root)
+uvicorn instaclone.app:app --host 127.0.0.1 --port 8100 --app-dir .
+# Dashboard (repo root)
+streamlit run dashboard/studyreel_dashboard.py --server.port 8501
+# Seed if needed
+python seed/seed_insta.py
+```
 
 ---
 
-## 6. Running Tests
+## 6. Download — Feed-First, Offline When You Want
+- **Primary:** after `Render` (auto-publish ✅) images live in feed `http://127.0.0.1:8100/feed` — scroll instead of Instagram, like/view counts, trending `likes*0.7+views*0.15`
+- **Secondary (on-demand):** `Carousel Preview & Export` → `⬇️ Download Carousel ZIP` or `📄 Export Topics JSON` — only when you ask
 
-StudyReel uses `pytest` to maintain strict contract validation:
+## 7. Running Tests
 
 From `backend/`:
 ```bash
-pytest tests/ -v
+pytest tests/ -v                 # 53 backend (76s)
+PYTHONPATH=.:backend pytest ../instaclone/tests -v  # 7 instaclone
 ```
 
 > [!NOTE]
-> All 25 baseline test cases must stay green before and after making any modifications.
+> `60/60 green` required (53+7). Before/after every change. Live `GEMINI_API_KEY` needed for 8 live tests else skipped → 45.

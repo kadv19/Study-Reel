@@ -25,10 +25,10 @@ This log tracks sprint progress, deliverables, decisions, and blockers across al
 **Dates:** 2026-08-14 – 2026-08-21  
 **Lead:** P2 (AI/ML Engine)
 
-### In Progress:
-- Gemini 2.5 Flash client validation against `MicroTopic` pydantic schema.
-- System prompt tuning to maintain header <= 30 chars, body <= 140 chars, and code block formatting.
-- Caching layer enhancement using module text MD5 checksums.
+### Shipped:
+- Gemini 2.5 Flash client (`gemini-3.6-flash` + failover) live-validated via `tests/test_gemini_live.py` (5 modules, 5/5 green 2026-09-11).
+- `PostMetadata` generation (`post_metadata.py`) with caption/hashtags/cover_slide — `tests/test_post_metadata.py` 3/3 green.
+- Prompt tuning exam-focused, cache schema v2, Ollama fallback `qwen2.5:7b`.
 
 ---
 
@@ -36,10 +36,10 @@ This log tracks sprint progress, deliverables, decisions, and blockers across al
 **Dates:** 2026-08-22 – 2026-08-29  
 **Lead:** P3 (Rendering & Visual Design)
 
-### In Progress:
-- Jinja2 template definitions for 1080x1350 Instagram slides (`text.html`, `code.html`, `mixed.html`).
-- Playwright headless rendering pipeline for high-DPI screenshot generation.
-- Stress testing for text overflows and Pygments syntax highlighting.
+### Shipped:
+- Jinja2 templates 1080×1350 dark theme (`text.html`, `code.html`, `mixed.html`) + local woff2 fonts.
+- Playwright headless `render_carousel()` pipeline — `tests/test_renderer.py` 6/6 green (2026-09-11).
+- InstaClone stub `instaclone/app.py` (port 8100) with `POST /api/posts`, `GET /api/feed`, `GET /feed` — `tests/test_instaclone.py` 7/7 green.
 
 ---
 
@@ -99,7 +99,25 @@ The Publisher abstraction in `backend/app/publisher/` means this is a config-onl
 - `schemas.py` not touched — `PostMetadata` and `PublishRequest` consumed read-only.
 - `backend/app/publisher/` not touched — only HTTP endpoints consumed.
 - Dashboard kept under 350 lines (317 lines).
-- Tests run before and after: baseline 32 pass / 1 pre-existing Playwright failure maintained.
+- Tests 2026-09-11: backend 53/53 green + instaclone 7/7 green (60 total). No Playwright failure.
+
+---
+
+## 📅 Sprint 5: Phase 2 Publisher Abstraction — DONE
+**Dates:** 2026-08-29 – 2026-09-11  
+**Lead:** P1 (Publisher & Pipeline) — Phase 2 closure 2026-09-11
+
+### Shipped:
+- `backend/app/schemas.py:132` `PostMetadata` (caption 2200, hashtags 3-30 `_lower_strip`) + `PublishRequest` (carousel_id, caption, hashtags, schedule_at).
+- `backend/app/publisher/` abstraction: `publisher.py:17` `PublishResult`/`Publisher` protocol, `instaclone.py:17` PNG copy to `instaclone/data/slides/{post_id}/` + POST to `INSTACLONE_URL:8100`, `instagram.py:24` Graph stub (60d token), `store.py:12` `studyreel_publisher.db` (published/scheduled/oauth), `__init__.py:10` `PUBLISHER` env switch.
+- `backend/app/api_v2.py:31` `POST /publish` (queue vs immediate), `GET /posts`, `GET /status`, `POST /oauth/*`, scheduler `5s` polling `due_scheduled_posts`.
+- `backend/app/main.py:29` `v0.3.0` + `include_router` + `start_scheduler()` on startup.
+- `backend/.env.example:17` `PUBLISHER=instaclone`/`INSTACLONE_URL`/`PUBLISHER_DB` + `requests` in `requirements.txt:12`.
+- `tests/test_publisher.py:28` (protocol/store/oauth) + `tests/test_api_v2.py:45` (mocked `get_publisher`) — 7/7 green; full suite 60/60.
+- Live smoke 2026-09-11: immediate `a748ffa4` + scheduled `d212ae23` + oauth 60d verified on `127.0.0.1:8100`/`8000`.
+
+### Phase 2 Closure Decision:
+Publisher seam proven — `PUBLISHER=instaclone` today, `instagram` tomorrow via env only. No dashboard/API contract break. Next: UI polish, downloadable packaging, smooth run.
 
 ---
 
@@ -116,4 +134,12 @@ The Publisher abstraction in `backend/app/publisher/` means this is a config-onl
    `GET /api/v2/posts` returns list with `{id, provider, media_id, carousel_id, caption, hashtags, feed_url, published_at}`.
    P4 must not add fields or rename — consume exactly what P1 provides.
 4. **Port discipline re-confirmed:** backend 8000, InstaClone 8100, dashboard 8501. No guessing.
+
+### Meeting #3 (2026-09-11) — Phase 2 DONE
+**Attendees:** P1, P2, P3, P4
+
+#### Agenda & Decisions:
+1. **Verification:** `pytest` 53 backend +7 instaclone =60/60 green (76s). Live smoke immediate `a748ffa4` + scheduled `5s poll` + oauth 60d on `8100`/`8000`.
+2. **Closure:** Publisher abstraction closed, `v0.3.0` tagged. `schemas.py` contract frozen, `PUBLISHER` switch validated.
+3. **Next:** UI polish (Streamlit + InstaClone feed dark theme), downloadable packaging (`pip install`, `docker`, `studyreel.db` + `studyreel_publisher.db`), smooth run (ports 8000/8100/8501, one-command `uvicorn` + `streamlit run`).
 

@@ -309,6 +309,82 @@ curl -X POST "http://127.0.0.1:8000/api/v2/oauth/revoke"
 
 ---
 
+## 7b. Tailored Metadata Preview — v2
+
+### `POST /api/v2/metadata/preview`
+Preview tailored caption/hashtags/cover without publishing. Used by Deck auto-publish and dashboard `✨ Generate`.
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v2/metadata/preview" \
+  -H "Content-Type: application/json" \
+  -d '{"module_name":"OS — Module 3","topics":[{"header":"Round Robin","body":"Body","code_block":null,"language_tag":null}]}'
+```
+
+#### Response (`200 OK`)
+```json
+{
+  "caption": "Are you ready to master Round Robin for OS exam? Save this carousel!",
+  "hashtags": ["os","roundrobin","vtu","exam","studyreel"],
+  "cover_slide": 0
+}
+```
+
+---
+
+## 7c. Card Catalog API — v1 (Deck/Cabinet)
+
+Per-user filing via `X-User-Id` header (pseudo `anon-xxxx` or real `uuid` from `/api/v1/users`). Shelf fill = `mastered/total`.
+
+### `GET /api/v1/colleges`
+List clean college codes for dropdown.
+```bash
+curl http://127.0.0.1:8000/api/v1/colleges
+# [{"code":"vtu_belgaum","label":"VTU Belgaum"}, ...]
+```
+
+### `POST /api/v1/users`
+Idempotent pseudo account (C, no password). Same `email` returns same `id`, updates `name/college`.
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/users -H "Content-Type: application/json" \
+  -d '{"name":"Advaith","email":"a@test.com","college":"vtu_belgaum"}'
+# {"id":"uuid...","name":"Advaith","email":"a@test.com","college":"vtu_belgaum",...}
+```
+
+### `GET /api/v1/users/{id}`
+Fetch user profile.
+
+### `POST /api/v1/users/migrate`
+Migrate `anon` cards to real id after onboarding.
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/users/migrate -H "Content-Type: application/json" \
+  -d '{"from_id":"anon-abc","to_id":"uuid-xyz"}'
+# {"migrated": 3}
+```
+
+### `GET /api/v1/shelves`
+List shelves (per carousel) with fill `mastered/total`.
+```bash
+curl -H "X-User-Id: anon-abc" http://127.0.0.1:8000/api/v1/shelves
+# [{"shelf_id":"42","label":"OS","module_name":"OS — Module 3","carousel_id":42,"total_slides":3,"mastered_count":1,"fill_pct":0.33}]
+```
+
+### `GET /api/v1/deck?shelf=42`
+Unfiled + review (catalog/mastered hidden, review resurfaces at tail).
+
+### `POST /api/v1/file`
+File a card: `left=review amber, down=catalog cyan, right=mastered (display Got it) green`.
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/file -H "X-User-Id: anon-abc" -H "Content-Type: application/json" \
+  -d '{"post_id":"42","slide_index":0,"status":"mastered"}'
+# {"card_key":"42:0","status":"mastered","shelf_fill":0.33}
+```
+
+### `GET /api/v1/cabinet?tray=review|catalog|mastered`
+List filed cards per tray, most recent first.
+
+---
+
 ## 8. Core Data Schemas
 
 ### `MicroTopic`
@@ -318,6 +394,9 @@ curl -X POST "http://127.0.0.1:8000/api/v2/oauth/revoke"
 | `body` | `str` | Max 140 characters |
 | `code_block` | `Optional[str]` | Max 22 lines, max 62 chars per line |
 | `language_tag` | `Optional[str]` | Whitelisted: `python`, `java`, `cpp`, `c`, `js`, `sql`, `kotlin`, `go`, `bash`, `html`, `css` |
+| `back_header` | `Optional[str]` | Max 30, back side prompt e.g. `Why it matters` |
+| `back_body` | `Optional[str]` | Max 140, exam relevance |
+| `exam_weight` | `Optional["low"\|"medium"\|"high"]` | Exam weight, drives dots + shelf fill tie-breaker |
 
 ### `Slide`
 | Field | Type | Description |
@@ -340,7 +419,22 @@ curl -X POST "http://127.0.0.1:8000/api/v2/oauth/revoke"
 | `carousel_id` | `int` | Row ID from the render endpoint |
 | `caption` | `str` | Max 2 200 characters |
 | `hashtags` | `list[str]` | 0–30 items; auto-lowercased, `#` stripped |
+| `cover_slide` | `int` | Cover index, ge 0 (tailored) |
 | `schedule_at` | `Optional[str]` | ISO 8601 datetime; `null` = publish immediately |
+
+### `UserCreate` / `UserOut` (v1 pseudo, C)
+| Field | Type | Rules |
+|---|---|---|
+| `name` | `str` | 1-60 |
+| `email` | `str` | must contain @, lowercased, unique |
+| `college` | `str` | Must be `vtu_belgaum/bmsce/rvce/pes_university/msrit/dsce/other` (dropdown only) |
+
+### `FileCardRequest` (v1)
+| Field | Type | Rules |
+|---|---|---|
+| `post_id` | `str` | Carousel id (`carousel_id` as string) |
+| `slide_index` | `int` | ge 0, < total_slides |
+| `status` | `"review"\|"catalog"\|"mastered"` | Filing tray; mastered display `Got it` |
 
 ### `PostMetadata` (v2, owned by P1/P2)
 | Field | Type | Rules |
