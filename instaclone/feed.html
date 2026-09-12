@@ -14,12 +14,23 @@
     <div class="brand-title">
       <span class="brand-logo">&#10022;</span>
       <span>StudyReel</span>
+      <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted);margin-left:8px;">learn to scroll</span>
     </div>
     <div class="live-badge">
       <span class="live-dot"></span>
       <span>Live Feed</span>
     </div>
   </header>
+  <nav class="filter-bar" id="filter-bar">
+    <button class="filter-chip active" data-tag="all" onclick="setFilter('all')">All</button>
+    <button class="filter-chip" data-tag="ai" onclick="setFilter('ai')">AI</button>
+    <button class="filter-chip" data-tag="ev" onclick="setFilter('ev')">EV</button>
+    <button class="filter-chip" data-tag="aerodynamics" onclick="setFilter('aerodynamics')">Aero</button>
+    <button class="filter-chip" data-tag="computerscience" onclick="setFilter('computerscience')">CS</button>
+    <button class="filter-chip" data-tag="machinelearning" onclick="setFilter('machinelearning')">ML</button>
+    <button class="filter-chip" data-tag="trending" onclick="setSort('trending')">🔥 Trending</button>
+    <button class="filter-chip" data-tag="newest" onclick="setSort('newest')">✨ Newest</button>
+  </nav>
 
   <main class="feed-container" id="feed-container">
     <div class="empty-state">

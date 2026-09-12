@@ -101,18 +101,66 @@ def interact_post(media_id: str, payload: InteractRequest) -> Dict[str, int]:
 
 
 @app.get("/api/feed")
-def get_feed() -> Dict[str, List[Dict[str, Any]]]:
+def get_feed(
+    sort: str = Query(default="newest", description="trending|newest"),
+    tag: Optional[str] = Query(default=None, description="filter by hashtag without #"),
+) -> Dict[str, List[Dict[str, Any]]]:
     posts = load_posts()
-    # Sort latest first (descending by created_at or reverse order)
-    sorted_posts = sorted(posts, key=lambda p: p.get("created_at", ""), reverse=True)
+    if tag:
+        t = tag.lower().lstrip("#")
+        posts = [p for p in posts if any(h.lower().lstrip("#") == t for h in p.get("hashtags", []))]
+    if sort == "newest":
+        sorted_posts = sorted(posts, key=lambda p: p.get("created_at", ""), reverse=True)
+    else:
+        # trending = likes*0.7 + views*0.15 - hours_ago*0.08 (global trending)
+        def _score(p: Dict[str, Any]) -> float:
+            try:
+                created = datetime.fromisoformat(p.get("created_at", "").replace("Z", "+00:00"))
+                hours = (datetime.now(timezone.utc) - created).total_seconds() / 3600
+            except Exception:
+                hours = 999
+            return p.get("likes", 0) * 0.7 + p.get("views", 0) * 0.15 - hours * 0.08
+        sorted_posts = sorted(posts, key=_score, reverse=True)
     return {"posts": sorted_posts}
 
 
 @app.get("/feed", response_class=HTMLResponse)
 def serve_feed() -> HTMLResponse:
-    if not FEED_HTML.exists():
-        raise HTTPException(status_code=404, detail="feed.html not found")
-    return HTMLResponse(content=FEED_HTML.read_text(encoding="utf-8"))
+    # Card Catalog is primary; old Instagram feed kept at /feed_legacy for cold-start debug only
+    if DECK_HTML.exists():
+        return HTMLResponse(content=DECK_HTML.read_text(encoding="utf-8"))
+    if FEED_HTML.exists():
+        return HTMLResponse(content=FEED_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="feed not found")
+
+@app.get("/feed_legacy", response_class=HTMLResponse)
+def serve_feed_legacy() -> HTMLResponse:
+    if FEED_HTML.exists():
+        return HTMLResponse(content=FEED_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="feed.html not found")
+
+
+DECK_HTML = BASE_DIR / "deck.html"
+CABINET_HTML = BASE_DIR / "cabinet.html"
+
+@app.get("/deck", response_class=HTMLResponse)
+def serve_deck() -> HTMLResponse:
+    if DECK_HTML.exists():
+        return HTMLResponse(content=DECK_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="deck.html not found")
+
+@app.get("/cabinet", response_class=HTMLResponse)
+def serve_cabinet() -> HTMLResponse:
+    if CABINET_HTML.exists():
+        return HTMLResponse(content=CABINET_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="cabinet.html not found")
+
+@app.get("/", response_class=HTMLResponse)
+def serve_root() -> HTMLResponse:
+    # Card Catalog is now primary (deck), old feed kept at /feed for cold-start
+    if DECK_HTML.exists():
+        return HTMLResponse(content=DECK_HTML.read_text(encoding="utf-8"))
+    return HTMLResponse(content=FEED_HTML.read_text(encoding="utf-8") if FEED_HTML.exists() else "<h1>StudyReel</h1>")
 
 
 @app.get("/api/media")

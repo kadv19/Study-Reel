@@ -100,6 +100,7 @@ def publish_carousel(
     carousel_id: int,
     caption: str,
     hashtags: list[str],
+    cover_slide: int = 0,
     schedule_at: str | None = None,
 ) -> dict:
     """Publish (or schedule) a rendered carousel to the active publisher."""
@@ -107,12 +108,21 @@ def publish_carousel(
         "carousel_id": carousel_id,
         "caption": caption,
         "hashtags": hashtags,
+        "cover_slide": cover_slide,
         "schedule_at": schedule_at,
     }
     res = requests.post(f"{base_url}/api/v2/publish", json=payload, timeout=60)
     if res.status_code == 200:
         return res.json()
     raise RuntimeError(f"Publish failed: {res.status_code} {res.text[:200]}")
+
+
+def generate_tailored_metadata(base_url: str, module_name: str, topics: list[dict]) -> dict:
+    """Call tailored preview — returns {caption, hashtags, cover_slide}."""
+    res = requests.post(f"{base_url}/api/v2/metadata/preview", json={"module_name": module_name, "topics": topics}, timeout=60)
+    if res.status_code == 200:
+        return res.json()
+    raise RuntimeError(f"Tailored preview failed: {res.status_code} {res.text[:200]}")
 
 
 def fetch_published_posts(base_url: str) -> list[dict]:

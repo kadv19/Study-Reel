@@ -88,5 +88,15 @@ body {
 .hashtag { color: var(--accent-cyan); font-weight: 500; text-decoration: none; transition: color 0.15s; }
 .hashtag:hover { text-decoration: underline; color: #7dd3fc; }
 
+.filter-bar { max-width:520px; margin:16px auto 0; padding:0 16px; display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; }
+.filter-bar::-webkit-scrollbar { display:none; }
+.filter-chip { flex-shrink:0; padding:6px 14px; border-radius:9999px; border:1px solid var(--border-color); background:var(--bg-surface); color:var(--text-muted); font-size:0.8rem; font-weight:600; cursor:pointer; transition:all 0.15s; }
+.filter-chip.active { background:linear-gradient(135deg,var(--accent-cyan),var(--accent-glow)); color:#fff; border-color:transparent; box-shadow:0 4px 12px rgba(56,189,248,0.3); }
+.filter-chip:hover { border-color:var(--accent-cyan); color:var(--text-main); }
+
+.skeleton-card { background:var(--bg-surface); border:1px solid var(--border-color); border-radius:16px; padding:16px; animation:pulse 1.5s infinite; }
+.skeleton-line { height:14px; background:var(--border-color); border-radius:6px; margin:10px 0; }
+.skeleton-img { height:340px; background:var(--border-color); border-radius:12px; margin:12px 0; }
+
 .empty-state { text-align: center; padding: 60px 20px; background: var(--bg-surface); border-radius: 16px; border: 1px dashed var(--border-color); }
 .empty-icon { font-size: 3rem; margin-bottom: 12px; color: var(--accent-cyan); }

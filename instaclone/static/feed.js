@@ -1,5 +1,9 @@
-// StudyReel InstaClone Feed Controller
+// StudyReel InstaClone Feed Controller — global trending, tag filter, diff, swipe
 const postStates = {}; // { [postId]: { currentSlide: number, liked: boolean, viewed: boolean } }
+let currentTag = "all";
+let currentSort = "trending";
+let lastHash = "";
+let touchStartX = 0;
 
 function resolveMediaUrl(path) {
   if (!path) return '';
@@ -29,6 +33,8 @@ async function handleInteract(postId, action, btnEl = null, countEl = null) {
       postStates[postId].liked = true;
       if (btnEl) btnEl.classList.add('liked');
       if (countEl) countEl.textContent = data.likes;
+    } else if (action === 'view' && countEl) {
+      countEl.textContent = data.views;
     }
   } catch (err) { console.error('Interact failed:', err); }
 }
@@ -44,6 +50,50 @@ function changeSlide(postId, newIdx, total) {
   dots.forEach((dot, idx) => dot.classList.toggle('active', idx === newIdx));
 }
 
+function attachSwipe(postId, total) {
+  const container = document.getElementById(`carousel-${postId}`);
+  if (!container) return;
+  container.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, {passive:true});
+  container.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) < 40) return;
+    const cur = postStates[postId].currentSlide;
+    if (dx < 0) changeSlide(postId, cur+1, total);
+    else changeSlide(postId, cur-1, total);
+  }, {passive:true});
+}
+
+function setFilter(tag) {
+  currentTag = tag;
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    const t = c.dataset.tag;
+    if (["trending","newest"].includes(t)) return;
+    c.classList.toggle('active', t===tag);
+  });
+  // Keep sort chip active separately
+  loadFeed(true);
+}
+
+function setSort(sort) {
+  currentSort = sort;
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    if (c.dataset.tag==="trending" || c.dataset.tag==="newest") {
+      c.classList.toggle('active', c.dataset.tag===sort);
+    }
+  });
+  loadFeed(true);
+}
+
+function onHashtagClick(tag, e) {
+  e.preventDefault();
+  const clean = tag.replace(/^#/,'').toLowerCase();
+  // Map hashtag to filter bucket: if tag is ai/rag etc -> ai, ev/bms/battery -> ev, aero/lift -> aero
+  const map = {rag:"ai", transformer:"ai", machinelearning:"ai", llm:"ai", ev:"ev", bldc:"ev", battery:"ev", bms:"ev", aerodynamics:"aerodynamics", lift:"aerodynamics", drag:"aerodynamics", aviation:"aerodynamics"};
+  const bucket = map[clean] || clean;
+  // Try direct tag first
+  setFilter(bucket);
+}
+
 function renderPost(post) {
   const pid = post.post_id || post.media_id;
   const slides = post.slides || [];
@@ -57,7 +107,7 @@ function renderPost(post) {
 
   const slidesHtml = slides.map(s => `
     <div class="carousel-slide">
-      <img src="${resolveMediaUrl(s.image_path)}" alt="${s.header || 'Slide'}" loading="lazy" />
+      <img src="${resolveMediaUrl(s.image_path)}" alt="${s.header || 'Slide'}" loading="lazy" onerror="this.style.opacity='0.3'" />
     </div>`).join('');
 
   const dotsHtml = slides.length > 1 ? `
@@ -71,7 +121,8 @@ function renderPost(post) {
 
   const hashtagsHtml = (post.hashtags || []).map(tag => {
     const cleanTag = tag.startsWith('#') ? tag : `#${tag}`;
-    return `<a href="#" class="hashtag">${cleanTag}</a>`;
+    const raw = tag.replace(/^#/,'');
+    return `<a href="#" class="hashtag" onclick="onHashtagClick('${raw}', event)">${cleanTag}</a>`;
   }).join(' ');
 
   return `
@@ -81,12 +132,12 @@ function renderPost(post) {
           <div class="avatar-ring"><div class="avatar-inner">SR</div></div>
           <div>
             <div class="author-name">studyreel.ai <span style="color:#38bdf8;font-size:0.8rem;">&#10004;</span></div>
-            <div class="post-time">${timeAgo(post.created_at)}</div>
+            <div class="post-time">${timeAgo(post.created_at)} · ${post.likes||0} likes</div>
           </div>
         </div>
       </header>
 
-      <div class="carousel-container" ondblclick="handleInteract('${pid}', 'like', document.getElementById('like-btn-${pid}'), document.getElementById('like-count-${pid}'))">
+      <div class="carousel-container" id="carousel-${pid}" ondblclick="handleInteract('${pid}', 'like', document.getElementById('like-btn-${pid}'), document.getElementById('like-count-${pid}'))">
         <div class="carousel-track" id="track-${pid}" style="transform: translateX(-${curSlide * 100}%);">
           ${slidesHtml}
         </div>
@@ -109,7 +160,7 @@ function renderPost(post) {
 
       <div class="post-content">
         <div class="post-caption">
-          <strong>studyreel.ai</strong>${post.caption || ''}
+          <strong>studyreel.ai</strong> ${post.caption || ''}
         </div>
         <div class="hashtags-container">${hashtagsHtml}</div>
       </div>
@@ -122,15 +173,31 @@ const observer = new IntersectionObserver((entries) => {
       const pid = entry.target.dataset.postId;
       if (pid && postStates[pid] && !postStates[pid].viewed) {
         postStates[pid].viewed = true;
-        handleInteract(pid, 'view', null, null);
+        const vc = document.getElementById(`view-count-${pid}`);
+        handleInteract(pid, 'view', null, vc);
+        if (vc) vc.textContent = String((parseInt(vc.textContent)||0)+1);
       }
     }
   });
 }, { threshold: 0.5 });
 
-async function loadFeed() {
+function hashPosts(posts) {
+  return posts.map(p => `${p.post_id}:${p.likes}:${p.views}`).join('|');
+}
+
+function showSkeleton() {
+  const container = document.getElementById('feed-container');
+  if (!container) return;
+  if (container.dataset.loaded==="true") return;
+  container.innerHTML = [1,2].map(()=>`<div class="skeleton-card"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-img"></div><div class="skeleton-line" style="width:80%"></div></div>`).join('');
+}
+
+async function loadFeed(force=false) {
+  if (!force) showSkeleton();
   try {
-    const res = await fetch('/api/feed');
+    const params = new URLSearchParams({sort: currentSort});
+    if (currentTag && currentTag!=="all" && currentTag!=="trending" && currentTag!=="newest") params.set("tag", currentTag);
+    const res = await fetch(`/api/feed?${params.toString()}`);
     if (!res.ok) return;
     const data = await res.json();
     const posts = Array.isArray(data) ? data : (data.posts || []);
@@ -142,17 +209,45 @@ async function loadFeed() {
         <div class="empty-state">
           <div class="empty-icon">&#128247;</div>
           <h3>No Posts Yet</h3>
-          <p style="color:var(--text-muted); margin-top:8px;">Rendered carousels published via POST /api/posts will appear here live.</p>
+          <p style="color:var(--text-muted); margin-top:8px;">Trending AI/EV/Aero carousels will appear here. Upload a syllabus to generate your first post!</p>
         </div>`;
+      container.dataset.loaded="true";
       return;
     }
 
+    const h = hashPosts(posts);
+    if (!force && h===lastHash && container.dataset.loaded==="true") {
+      // still update counts live via DOM without full rebuild? quick patch counts
+      posts.forEach(p=>{
+        const pid=p.post_id||p.media_id;
+        const lc=document.getElementById(`like-count-${pid}`);
+        const vc=document.getElementById(`view-count-${pid}`);
+        if(lc) lc.textContent=p.likes||0;
+        if(vc) vc.textContent=p.views||0;
+      });
+      return;
+    }
+    lastHash=h;
+    container.dataset.loaded="true";
     container.innerHTML = posts.map(renderPost).join('');
+    // attach swipe + observer
+    posts.forEach(p=>{
+      const pid=p.post_id||p.media_id;
+      attachSwipe(pid, (p.slides||[]).length);
+    });
     document.querySelectorAll('.post-card').forEach(card => observer.observe(card));
+    // keyboard nav for first post
+    document.onkeydown = (e)=>{
+      const first = posts[0]; if(!first) return;
+      const pid=first.post_id||first.media_id;
+      const total=(first.slides||[]).length;
+      if(e.key==="ArrowRight") changeSlide(pid, postStates[pid].currentSlide+1, total);
+      if(e.key==="ArrowLeft") changeSlide(pid, postStates[pid].currentSlide-1, total);
+    };
   } catch (err) { console.error('Error loading feed:', err); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   loadFeed();
-  setInterval(loadFeed, 10000); // 10s auto-refresh
+  setInterval(loadFeed, 10000);
 });
