@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>StudyReel — My Cabinet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e1a; --surface:#0f1729; --card:#fffdf6; --card-ink:#2a2116; --border:#1e2d4a;
+    --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399;
+    --text:#eef2f8; --muted:#8b9bb4;
+    --wood-1:#5a4636; --wood-2:#3c2f24; --wood-3:#2a2019;
+    --brass:#c9a15a; --brass-dark:#8a6a35;
+  }
+  [data-theme="light"]{
+    --bg:#eef1f6; --surface:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0;
+    --text:#0f172a; --muted:#64748b;
+    --wood-1:#8a6f52; --wood-2:#6e5540; --wood-3:#5a4433;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text);
+    display:flex; justify-content:center; padding:36px 16px; min-height:100vh;
+    background-image:
+      radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--cyan) 9%, transparent), transparent 45%),
+      radial-gradient(circle at 92% 88%, color-mix(in srgb, var(--indigo) 9%, transparent), transparent 42%);
+  }
+  .mono{font-family:'Fira Code',monospace;}
+  .wrap{width:100%; max-width:400px;}
+
+  .topbar{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px;}
+  .word{font-family:'Fraunces',serif; font-weight:600; font-size:23px; letter-spacing:-0.01em;}
+  .tagline{font-size:11.5px; color:var(--muted); margin-top:3px; font-style:italic;}
+  .themebtn{border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:20px; width:34px; height:34px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .15s;}
+  .themebtn:hover{transform:scale(1.08);}
+
+  .cabinet{
+    border-radius:14px; padding:16px 14px;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,.06) 0 2px, transparent 2px 46px),
+      linear-gradient(155deg, var(--wood-1), var(--wood-2) 55%, var(--wood-3));
+    box-shadow: 0 24px 48px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.06);
+    position:relative;
+  }
+  .cabinet::before{
+    content:''; position:absolute; inset:6px; border-radius:9px; pointer-events:none;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.35), inset 0 -2px 6px rgba(255,255,255,.04);
+  }
+
+  .drawer-unit{margin-bottom:12px; position:relative;}
+  .drawer-unit:last-child{margin-bottom:0;}
+
+  .drawer-face{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; user-select:none;
+    padding:16px 18px; border-radius:8px; position:relative;
+    background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.12)), var(--panel, #4a3a2c);
+    box-shadow: 0 3px 8px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.08), inset 0 -6px 10px -6px rgba(0,0,0,.4);
+    transition: transform .2s, box-shadow .2s;
+  }
+  .drawer-face:hover{transform:translateY(-1px);}
+  .drawer-unit.open .drawer-face{transform:translateY(2px) translateX(6px); box-shadow: 0 2px 5px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06);}
+
+  .handle{
+    width:46px; height:9px; border-radius:5px; flex-shrink:0;
+    background:linear-gradient(180deg, #e7c98a, var(--brass) 40%, var(--brass-dark));
+    box-shadow: 0 2px 3px rgba(0,0,0,.4), inset 0 1px 1px rgba(255,255,255,.5);
+  }
+  .drawer-mid{flex:1; min-width:0;}
+  .drawer-name{font-family:'Fraunces',serif; font-size:15px; font-weight:600; color:#f5ecd8;}
+  .drawer-sub{font-size:10.5px; color:rgba(245,236,216,.6); margin-top:2px;}
+  .drawer-dot{width:9px; height:9px; border-radius:50%; flex-shrink:0; box-shadow:0 0 8px currentColor;}
+  .chev{font-size:12px; color:rgba(245,236,216,.55); transition:transform .25s; flex-shrink:0;}
+  .drawer-unit.open .chev{transform:rotate(180deg);}
+
+  .drawer-inside{max-height:0; overflow:hidden; transition:max-height .35s cubic-bezier(.4,0,.2,1);}
+  .drawer-unit.open .drawer-inside{max-height:420px;}
+  .inside-pad{
+    padding:12px 8px 4px; display:flex; flex-direction:column; gap:8px;
+  }
+
+  .idxcard{
+    display:flex; align-items:center; gap:11px; cursor:pointer; position:relative; overflow:hidden;
+    border-radius:8px; padding:11px 13px 11px 15px;
+    background-color:var(--card); color:var(--card-ink);
+    background-image: repeating-linear-gradient(rgba(0,0,0,.045), rgba(0,0,0,.045) 1px, transparent 1px, transparent 19px);
+    box-shadow: 0 4px 10px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.5) inset;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .idxcard:hover{transform:translateX(3px); box-shadow: 0 6px 14px rgba(0,0,0,.32), 0 1px 0 rgba(255,255,255,.5) inset;}
+  .idxcard::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px;}
+  .idxcard.tone-review::before{background:var(--amber);}
+  .idxcard.tone-catalog::before{background:var(--cyan);}
+  .idxcard.tone-mastered::before{background:var(--green);}
+  .idxcard .punchmini{width:6px; height:6px; border-radius:50%; background:var(--bg); box-shadow:inset 0 1px 2px rgba(0,0,0,.4); flex-shrink:0;}
+  .idxcard .tab{font-size:9px; font-weight:700; padding:2px 7px; border-radius:20px; background:rgba(0,0,0,.06); flex-shrink:0; letter-spacing:.02em;}
+  .idxcard .title{font-size:12.5px; font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .idxcard .arrow{font-size:12px; opacity:.35; flex-shrink:0;}
+
+  .empty-note{font-size:11px; color:rgba(245,236,216,.5); text-align:center; padding:8px 0 2px; font-style:italic;}
+</style>
+</head>
+<body data-theme="dark">
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="word">My cabinet</div>
+      <div class="tagline">every card you've filed, by drawer</div>
+    </div>
+    <button class="themebtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+  </div>
+
+  <div class="cabinet">
+    <div class="drawer-unit open" id="drw-review">
+      <div class="drawer-face" style="--panel:#4a3a2c" onclick="toggleDrawer('drw-review')">
+        <div class="handle"></div>
+        <div class="drawer-mid">
+          <div class="drawer-name">Review</div>
+          <div class="drawer-sub">resurfaces on its own schedule</div>
+        </div>
+        <span class="drawer-dot" style="background:var(--amber); color:var(--amber);"></span>
+        <span class="chev">▾</span>
+      </div>
+      <div class="drawer-inside">
+        <div class="inside-pad">
+          <div class="idxcard tone-review"><span class="punchmini"></span><span class="tab mono">OS</span><span class="title">Round Robin Scheduling</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-review"><span class="punchmini"></span><span class="tab mono">DBMS</span><span class="title">B+ Tree Indexing</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-review"><span class="punchmini"></span><span class="tab mono">AERO</span><span class="title">Induced vs Parasite Drag</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-unit" id="drw-catalog">
+      <div class="drawer-face" style="--panel:#3c4a3e" onclick="toggleDrawer('drw-catalog')">
+        <div class="handle"></div>
+        <div class="drawer-mid">
+          <div class="drawer-name">Catalog</div>
+          <div class="drawer-sub">kept for later, no pressure</div>
+        </div>
+        <span class="drawer-dot" style="background:var(--cyan); color:var(--cyan);"></span>
+        <span class="chev">▾</span>
+      </div>
+      <div class="drawer-inside">
+        <div class="inside-pad">
+          <div class="idxcard tone-catalog"><span class="punchmini"></span><span class="tab mono">AI</span><span class="title">Attention Is All You Need — intuition</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-catalog"><span class="punchmini"></span><span class="tab mono">EV</span><span class="title">BLDC Motor Commutation</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-catalog"><span class="punchmini"></span><span class="tab mono">AI</span><span class="title">RAG vs Fine-tuning</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-catalog"><span class="punchmini"></span><span class="tab mono">AERO</span><span class="title">V-speeds at Takeoff</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-unit" id="drw-mastered">
+      <div class="drawer-face" style="--panel:#2c3a4a" onclick="toggleDrawer('drw-mastered')">
+        <div class="handle"></div>
+        <div class="drawer-mid">
+          <div class="drawer-name">Mastered</div>
+          <div class="drawer-sub">counts toward your shelf fill</div>
+        </div>
+        <span class="drawer-dot" style="background:var(--green); color:var(--green);"></span>
+        <span class="chev">▾</span>
+      </div>
+      <div class="drawer-inside">
+        <div class="inside-pad">
+          <div class="idxcard tone-mastered"><span class="punchmini"></span><span class="tab mono">OS</span><span class="title">FCFS Scheduling</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-mastered"><span class="punchmini"></span><span class="tab mono">OS</span><span class="title">Deadlock — Banker's Algorithm</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-mastered"><span class="punchmini"></span><span class="tab mono">CS</span><span class="title">DBMS Normalization 1NF-3NF</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-mastered"><span class="punchmini"></span><span class="tab mono">AI</span><span class="title">Self-Attention Q,K,V</span><span class="arrow">›</span></div>
+          <div class="idxcard tone-mastered"><span class="punchmini"></span><span class="tab mono">EV</span><span class="title">Regenerative Braking</span><span class="arrow">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleDrawer(id){
+  const el = document.getElementById(id);
+  const wasOpen = el.classList.contains('open');
+  document.querySelectorAll('.drawer-unit').forEach(d=>d.classList.remove('open'));
+  if(!wasOpen) el.classList.add('open');
+}
+
+function toggleTheme(){
+  const b = document.body;
+  const isDark = b.getAttribute('data-theme') === 'dark';
+  b.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>StudyReel — Feed Mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#080c14; --surface:#0e1626; --card:#131e33; --border:#1e2d4a;
+    --cyan:#38bdf8; --indigo:#6366f1; --red:#f43f5e; --text:#e6edf7; --muted:#8b9bb4;
+  }
+  [data-theme="light"]{
+    --bg:#f8fafc; --surface:#ffffff; --card:#ffffff; --border:#e2e8f0;
+    --cyan:#38bdf8; --indigo:#6366f1; --red:#f43f5e; --text:#0f172a; --muted:#64748b;
+  }
+  body{font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); transition:background .3s,color .3s;}
+  .mono{font-family:'Fira Code',monospace;}
+  .surface{background:var(--surface);}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.15);}
+  .chip{border:1px solid var(--border); color:var(--muted); white-space:nowrap;}
+  .chip.active{background:linear-gradient(90deg,var(--cyan),var(--indigo)); color:white; border:none;}
+  .ring{background: conic-gradient(var(--cyan) var(--pct,70%), var(--border) 0);}
+  .pulse-dot{animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .heart-pop{animation:pop .3s ease;}
+  @keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.4)}100%{transform:scale(1)}}
+  .slide-track{transition:transform .35s cubic-bezier(0.2,0,0,1);}
+  ::-webkit-scrollbar{display:none;}
+  .no-scrollbar{scrollbar-width:none;}
+</style>
+</head>
+<body data-theme="dark" class="flex justify-center py-8 px-4">
+
+<div class="w-full max-w-[380px]">
+  <!-- header -->
+  <div class="sticky top-0 z-20 surface backdrop-blur-md border-b" style="border-color:var(--border)">
+    <div class="flex items-center justify-between px-4 py-3">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-lg" style="letter-spacing:-0.02em">StudyReel</span>
+        <span class="w-2 h-2 rounded-full pulse-dot" style="background:var(--red)"></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-xs" style="color:var(--muted)">learn to scroll</span>
+        <button onclick="toggleTheme()" class="text-xs px-2 py-1 rounded-full chip" id="themeBtn">🌙</button>
+      </div>
+    </div>
+    <!-- filter chips -->
+    <div class="flex gap-2 px-4 pb-3 overflow-x-auto no-scrollbar">
+      <button class="chip active px-3 py-1.5 rounded-full text-xs font-semibold" data-chip>Trending 🔥</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>All</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>VTU</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>AI</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>EV</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>Aero</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>CS</button>
+      <button class="chip px-3 py-1.5 rounded-full text-xs" data-chip>Newest ✨</button>
+    </div>
+  </div>
+
+  <!-- card -->
+  <div class="mt-5 card overflow-hidden">
+    <!-- card header -->
+    <div class="flex items-center gap-2.5 px-4 pt-4 pb-3">
+      <div class="relative w-11 h-11 rounded-full flex items-center justify-center ring" style="--pct:78%">
+        <div class="w-9 h-9 rounded-full surface flex items-center justify-center font-bold text-xs" style="color:var(--cyan)">SR</div>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-1 text-sm font-semibold">
+          studyreel.ai <span style="color:var(--cyan)">✓</span>
+          <span class="text-xs font-normal ml-1" style="color:var(--muted)">· 2h</span>
+        </div>
+        <div class="flex items-center gap-2 text-xs mt-0.5" style="color:var(--muted)">
+          <span>30s</span><span>·</span><span style="color:var(--cyan)">★★☆</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px]" style="background:var(--surface); border:1px solid var(--border)">Exam: High</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- slide -->
+    <div class="relative aspect-[4/5] overflow-hidden" ondblclick="doubleTapLike(this)">
+      <div class="absolute inset-0 flex flex-col justify-between p-6" style="background:linear-gradient(160deg,#0c1830,#101c33)">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] px-2 py-1 rounded-full chip active">1/6</span>
+          <span class="mono text-[10px] px-2 py-1 rounded" style="background:var(--surface); color:var(--cyan); border:1px solid var(--border)">Module 3 · OS</span>
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold mb-2" style="letter-spacing:-0.01em">Round Robin Scheduling</h2>
+          <p class="text-sm leading-relaxed" style="color:var(--muted)">Each process gets a fixed time quantum — fair, but context-switch heavy if the quantum's too small.</p>
+        </div>
+        <div class="mono text-xs p-3 rounded-lg" style="background:#0a1120; border:1px solid var(--border); color:#9ece6a">
+          quantum = 4ms<br>
+          <span style="color:#7aa2f7">while</span> queue: run(pop(), quantum)
+        </div>
+      </div>
+      <!-- heart pop overlay -->
+      <div id="heartOverlay" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0 text-6xl">♥</div>
+      <!-- dots -->
+      <div class="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full" style="background:var(--cyan)"></span>
+        <span class="w-1.5 h-1.5 rounded-full" style="background:var(--border)"></span>
+        <span class="w-1.5 h-1.5 rounded-full" style="background:var(--border)"></span>
+        <span class="w-1.5 h-1.5 rounded-full" style="background:var(--border)"></span>
+        <span class="w-1.5 h-1.5 rounded-full" style="background:var(--border)"></span>
+        <span class="w-1.5 h-1.5 rounded-full" style="background:var(--border)"></span>
+      </div>
+      <!-- prev/next -->
+      <button class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center text-sm" style="background:rgba(0,0,0,.35); color:white">‹</button>
+      <button class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center text-sm" style="background:rgba(0,0,0,.35); color:white">›</button>
+    </div>
+
+    <!-- caption -->
+    <div class="px-4 py-3 text-sm">
+      <span class="font-semibold">studyreel.ai</span>
+      <span style="color:var(--muted)"> RR scheduling is a VTU fav in OS papers — draw the Gantt chart, don't just define it. 🎯</span>
+      <div class="mt-1" style="color:var(--cyan)">#os #scheduling #vtu5thsem</div>
+    </div>
+
+    <!-- actions -->
+    <div class="flex items-center justify-between px-4 pb-4 pt-1 border-t" style="border-color:var(--border)">
+      <button onclick="likeBtn(this)" class="flex items-center gap-1.5 text-sm" id="likeBtn">
+        <span id="likeIcon">♡</span> <span id="likeCount">214</span>
+      </button>
+      <button onclick="saveBtn(this)" class="flex items-center gap-1.5 text-sm">
+        <span id="saveIcon">🔖</span> Save
+      </button>
+      <button class="flex items-center gap-1.5 text-sm" style="color:var(--cyan)" onclick="gotIt(this)">
+        ✅ Got it
+      </button>
+      <button class="flex items-center gap-1.5 text-sm" style="color:var(--muted)">
+        🔁 Review
+      </button>
+      <button class="flex items-center gap-1.5 text-sm" style="color:var(--muted)">
+        ? Ask
+      </button>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-1.5 justify-center mt-3 text-xs" style="color:var(--muted)">
+    <span>👁</span> <span>1,340 views</span> <span class="mx-1">·</span> <span id="statusMsg">tap chips, double-tap the slide, or hit Got it</span>
+  </div>
+</div>
+
+<script>
+function toggleTheme(){
+  const b = document.body;
+  const isDark = b.getAttribute('data-theme') === 'dark';
+  b.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+}
+document.querySelectorAll('[data-chip]').forEach(c=>{
+  c.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-chip]').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');
+    document.getElementById('statusMsg').textContent = 'filtered by: ' + c.textContent.trim();
+  });
+});
+function doubleTapLike(el){
+  const overlay = document.getElementById('heartOverlay');
+  overlay.style.opacity = 1;
+  overlay.classList.add('heart-pop');
+  overlay.style.color = 'var(--red)';
+  setTimeout(()=>{overlay.style.opacity=0; overlay.classList.remove('heart-pop');}, 500);
+  const icon = document.getElementById('likeIcon');
+  const count = document.getElementById('likeCount');
+  if(icon.textContent === '♡'){ icon.textContent='♥'; icon.style.color='var(--red)'; count.textContent = 215; }
+}
+function likeBtn(btn){
+  const icon = document.getElementById('likeIcon');
+  const count = document.getElementById('likeCount');
+  if(icon.textContent === '♡'){ icon.textContent='♥'; icon.style.color='var(--red)'; count.textContent = 215; }
+  else { icon.textContent='♡'; icon.style.color=''; count.textContent = 214; }
+}
+function saveBtn(btn){
+  const icon = document.getElementById('saveIcon');
+  icon.textContent = icon.textContent === '🔖' ? '✅🔖' : '🔖';
+  document.getElementById('statusMsg').textContent = icon.textContent === '✅🔖' ? 'saved to your library' : 'removed from library';
+}
+function gotIt(btn){
+  document.getElementById('statusMsg').textContent = 'marked mastered — mastery ring will tick up';
+}
+</script>
+</body>
+</html>

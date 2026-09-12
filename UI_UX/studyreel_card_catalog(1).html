@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>StudyReel — Card Catalog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e1a; --surface:#0f1729; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a;
+    --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399;
+    --text:#eef2f8; --muted:#8b9bb4; --wood:#3a2f26;
+  }
+  [data-theme="light"]{
+    --bg:#eef1f6; --surface:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0;
+    --text:#0f172a; --muted:#64748b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text);
+    display:flex; justify-content:center; padding:36px 16px; min-height:100vh;
+    background-image:
+      radial-gradient(circle at 15% 8%, color-mix(in srgb, var(--cyan) 10%, transparent), transparent 45%),
+      radial-gradient(circle at 90% 85%, color-mix(in srgb, var(--indigo) 10%, transparent), transparent 40%);
+    transition:background-color .3s,color .3s;
+  }
+  .mono{font-family:'Fira Code',monospace;}
+  .serif{font-family:'Fraunces',serif;}
+  .wrap{width:100%; max-width:400px;}
+
+  .topbar{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px;}
+  .word{font-family:'Fraunces',serif; font-weight:600; font-size:23px; letter-spacing:-0.01em;}
+  .tagline{font-size:11.5px; color:var(--muted); margin-top:3px; font-style:italic;}
+  .themebtn{border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:20px; width:34px; height:34px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:transform .15s;}
+  .themebtn:hover{transform:scale(1.08);}
+
+  .shelfscroll{overflow-x:auto; padding:6px 2px 18px; margin-bottom:2px;}
+  .shelfscroll::-webkit-scrollbar{display:none;}
+  .shelf{display:flex; align-items:flex-end; gap:7px; padding-bottom:10px; border-bottom:3px solid var(--wood); position:relative;}
+  [data-theme="light"] .shelf{border-bottom-color:#c9b89a;}
+  .spine{
+    flex:0 0 auto; width:38px; border-radius:4px 4px 2px 2px; cursor:pointer; position:relative;
+    display:flex; align-items:flex-end; justify-content:center; padding-bottom:8px;
+    box-shadow: inset -3px 0 6px rgba(0,0,0,.25), 0 3px 6px rgba(0,0,0,.25);
+    transition:transform .18s, height .3s ease; transform-origin:bottom;
+  }
+  .spine:hover{transform:translateY(-6px) rotate(-1deg);}
+  .spine.active{transform:translateY(-10px); box-shadow: inset -3px 0 6px rgba(0,0,0,.25), 0 6px 14px rgba(0,0,0,.35);}
+  .spine.active::after{content:''; position:absolute; top:-9px; left:50%; transform:translateX(-50%); width:5px; height:5px; border-radius:50%; background:var(--cyan);}
+  .spine .vlabel{writing-mode:vertical-rl; transform:rotate(180deg); font-size:10.5px; font-weight:700; color:rgba(255,255,255,.92); letter-spacing:.03em; text-shadow:0 1px 2px rgba(0,0,0,.3);}
+  .spine .fillcap{position:absolute; top:0; left:0; right:0; height:6px; border-radius:4px 4px 0 0; background:rgba(255,255,255,.5);}
+
+  .deckhead{display:flex; align-items:baseline; justify-content:space-between; margin:16px 2px 10px;}
+  .deckhead .name{font-family:'Fraunces',serif; font-size:16.5px; font-weight:600;}
+  .deckhead .hint{font-size:11px; color:var(--muted);}
+
+  .stack-area{position:relative; height:480px; touch-action:none;}
+
+  .card{
+    position:absolute; inset:0; border-radius:12px;
+    display:flex; flex-direction:column;
+    box-shadow:0 18px 40px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.15);
+    transition: transform .38s cubic-bezier(.2,0,0,1), opacity .32s, box-shadow .2s;
+    perspective:1200px;
+  }
+  .card.back2{transform:scale(.94) translateY(14px) rotate(-2deg); z-index:1; opacity:.7; box-shadow:0 8px 20px rgba(0,0,0,.2);}
+  .card.back3{transform:scale(.88) translateY(26px) rotate(2deg); z-index:0; opacity:.4; box-shadow:none;}
+  .card.top{z-index:3; cursor:grab;}
+  .card.top.dragging{cursor:grabbing; transition:none;}
+
+  .flipinner{position:relative; width:100%; height:100%; transform-style:preserve-3d; transition:transform .5s cubic-bezier(.4,.2,.2,1);}
+  .flipinner.flipped{transform:rotateY(180deg);}
+  .face{
+    position:absolute; inset:0; backface-visibility:hidden; border-radius:12px; overflow:hidden;
+    background-color:var(--card); color:var(--card-ink);
+    background-image: repeating-linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.05) 1px, transparent 1px, transparent 27px),
+      linear-gradient(160deg, transparent 60%, rgba(0,0,0,.04));
+    display:flex; flex-direction:column;
+  }
+  .face.back{transform:rotateY(180deg); background-color:#eee0c4;}
+  [data-theme="light"] .face.back{background-color:#fbf3df;}
+  .punch{position:absolute; top:16px; left:18px; width:11px; height:11px; border-radius:50%; background:var(--bg); box-shadow:inset 0 1px 3px rgba(0,0,0,.4);}
+  .ribbon{position:absolute; top:0; right:22px; width:16px; height:34px; background:linear-gradient(180deg,#e24b4a,#b8322f); clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); box-shadow:0 2px 4px rgba(0,0,0,.2);}
+
+  .cardhead{display:flex; justify-content:space-between; align-items:center; padding:18px 20px 6px 42px;}
+  .tab{font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(0,0,0,.06); color:var(--card-ink); opacity:.75;}
+  .cardbody{padding:4px 22px 10px 42px; flex:1; overflow:hidden; display:flex; flex-direction:column; justify-content:center;}
+  .cardbody h2{font-family:'Fraunces',serif; font-size:25px; font-weight:600; margin:6px 0 10px; letter-spacing:-0.01em; line-height:1.15;}
+  .cardbody p{font-size:14.5px; line-height:1.6; opacity:.78; margin:0 0 14px;}
+  .code{font-size:12px; padding:11px 13px; border-radius:8px; background:rgba(0,0,0,.85); color:#9ece6a; line-height:1.55; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);}
+  .cardfoot{display:flex; justify-content:space-between; align-items:center; padding:10px 20px 18px 42px; font-size:11px; opacity:.65; border-top:1px dashed rgba(0,0,0,.15);}
+  .weight{display:flex; align-items:center; gap:4px;}
+  .weight .dot{width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.3;}
+  .weight .dot.on{opacity:1;}
+  .flipbtn{background:rgba(0,0,0,.06); border:none; color:var(--card-ink); font-size:11px; cursor:pointer; font-weight:700; padding:6px 12px; border-radius:20px; display:flex; align-items:center; gap:5px;}
+  .flipbtn:hover{background:rgba(0,0,0,.1);}
+
+  .zonehint{
+    position:absolute; inset:0; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    font-family:'Fraunces',serif; font-weight:600; font-size:20px; opacity:0; pointer-events:none; transition:opacity .12s;
+    z-index:4;
+  }
+  .zonehint.on{opacity:1;}
+
+  .trays{display:flex; gap:10px; margin-top:20px;}
+  .tray{
+    flex:1; border-radius:12px; padding:14px 8px; text-align:center; position:relative; overflow:hidden;
+    background:var(--surface); border:1px solid var(--border); transition:transform .18s, box-shadow .18s, border-color .18s;
+  }
+  .tray .icon{font-size:17px; display:block; margin-bottom:4px;}
+  .tray .lbl{font-size:11.5px; font-weight:600;}
+  .tray.hover-review{transform:scale(1.06); border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 25%, transparent);}
+  .tray.hover-catalog{transform:scale(1.06); border-color:var(--cyan); box-shadow:0 0 0 3px color-mix(in srgb, var(--cyan) 25%, transparent);}
+  .tray.hover-mastered{transform:scale(1.06); border-color:var(--green); box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent);}
+  .tray.pulse-review{animation:pulseTray .5s; background:color-mix(in srgb, var(--amber) 14%, var(--surface));}
+  .tray.pulse-catalog{animation:pulseTray .5s; background:color-mix(in srgb, var(--cyan) 14%, var(--surface));}
+  .tray.pulse-mastered{animation:pulseTray .5s; background:color-mix(in srgb, var(--green) 14%, var(--surface));}
+  @keyframes pulseTray{0%{transform:scale(1)}40%{transform:scale(1.1)}100%{transform:scale(1)}}
+
+  .dragtip{text-align:center; font-size:11.5px; color:var(--muted); margin-top:16px; display:flex; align-items:center; justify-content:center; gap:6px;}
+</style>
+</head>
+<body data-theme="dark">
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="word">StudyReel</div>
+      <div class="tagline">a card catalog, not a feed</div>
+    </div>
+    <button class="themebtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+  </div>
+
+  <div class="shelfscroll">
+    <div class="shelf" id="shelfrow">
+      <div class="spine active" data-shelf="OS" style="height:74px; background:linear-gradient(180deg,#5a4a3a,#3a2f26);">
+        <div class="fillcap" style="height:52%; background:linear-gradient(180deg,#38bdf8,#818cf8);"></div>
+        <span class="vlabel">OS</span>
+      </div>
+      <div class="spine" data-shelf="DBMS" style="height:66px; background:linear-gradient(180deg,#4a3a4a,#2f2636);">
+        <div class="fillcap" style="height:18%; background:linear-gradient(180deg,#38bdf8,#818cf8);"></div>
+        <span class="vlabel">DBMS</span>
+      </div>
+      <div class="spine" data-shelf="AI" style="height:82px; background:linear-gradient(180deg,#3a4a3f,#26362c);">
+        <div class="fillcap" style="height:70%; background:linear-gradient(180deg,#38bdf8,#818cf8);"></div>
+        <span class="vlabel">AI</span>
+      </div>
+      <div class="spine" data-shelf="EV" style="height:70px; background:linear-gradient(180deg,#4a3f2f,#362c1f);">
+        <div class="fillcap" style="height:5%; background:linear-gradient(180deg,#38bdf8,#818cf8);"></div>
+        <span class="vlabel">EV</span>
+      </div>
+      <div class="spine" data-shelf="Aero" style="height:78px; background:linear-gradient(180deg,#2f3f4a,#1f2c36);">
+        <div class="fillcap" style="height:30%; background:linear-gradient(180deg,#38bdf8,#818cf8);"></div>
+        <span class="vlabel">AERO</span>
+      </div>
+      <div class="spine" data-shelf="CS" style="height:68px; background:linear-gradient(180deg,#4a3a3a,#362626);">
+        <div class="fillcap" style="height:41%; background:linear-gradient(180deg,#38bdf8,#818cf8);"></div>
+        <span class="vlabel">CS</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="deckhead">
+    <span class="name" id="shelfName">OS — Module 3</span>
+    <span class="hint">drag the card, or tap the trays</span>
+  </div>
+
+  <div class="stack-area" id="stackArea">
+    <div class="card back3"></div>
+    <div class="card back2"></div>
+    <div class="card top" id="topCard">
+      <div class="zonehint" id="zoneReview" style="background:color-mix(in srgb, var(--amber) 30%, transparent); color:#7a5200;">Review</div>
+      <div class="zonehint" id="zoneCatalog" style="background:color-mix(in srgb, var(--cyan) 30%, transparent); color:#00506b;">Catalog</div>
+      <div class="zonehint" id="zoneMastered" style="background:color-mix(in srgb, var(--green) 30%, transparent); color:#0a5c3d;">Mastered</div>
+      <div class="flipinner" id="flipInner">
+        <div class="face front">
+          <div class="punch"></div>
+          <div class="ribbon"></div>
+          <div class="cardhead">
+            <span class="tab mono">OS · MOD 3</span>
+            <span class="tab">30s read</span>
+          </div>
+          <div class="cardbody">
+            <h2>Round Robin Scheduling</h2>
+            <p>Each process gets a fixed time quantum — fair, but context-switch heavy if the quantum's too small.</p>
+            <div class="code mono">quantum = 4ms<br>while queue: run(pop(), quantum)</div>
+          </div>
+          <div class="cardfoot">
+            <span class="weight">exam weight <span class="dot on"></span><span class="dot on"></span><span class="dot"></span></span>
+            <button class="flipbtn" onclick="flipCard(event)">flip ↻</button>
+          </div>
+        </div>
+        <div class="face back">
+          <div class="punch"></div>
+          <div class="cardhead">
+            <span class="tab mono">WHY IT MATTERS</span>
+          </div>
+          <div class="cardbody">
+            <h2>Draw the Gantt chart</h2>
+            <p>VTU papers ask you to draw the Gantt chart AND compute average waiting time — not just define RR.</p>
+            <div class="code mono">AWT = sum(wait_i) / n</div>
+          </div>
+          <div class="cardfoot">
+            <span class="weight">exam weight <span class="dot on"></span><span class="dot on"></span><span class="dot"></span></span>
+            <button class="flipbtn" onclick="flipCard(event)">flip ↻</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="trays">
+    <div class="tray" id="trayReview" onclick="file('review')">
+      <span class="icon">↺</span><span class="lbl">Review</span>
+    </div>
+    <div class="tray" id="trayCatalog" onclick="file('catalog')">
+      <span class="icon">⊙</span><span class="lbl">Catalog</span>
+    </div>
+    <div class="tray" id="trayMastered" onclick="file('mastered')">
+      <span class="icon">✓</span><span class="lbl">Mastered</span>
+    </div>
+  </div>
+
+  <div class="dragtip">try dragging the card toward a tray</div>
+</div>
+
+<script>
+let flipped = false;
+const card = document.getElementById('topCard');
+const flipInner = document.getElementById('flipInner');
+const zones = { review: document.getElementById('zoneReview'), catalog: document.getElementById('zoneCatalog'), mastered: document.getElementById('zoneMastered') };
+const trays = { review: document.getElementById('trayReview'), catalog: document.getElementById('trayCatalog'), mastered: document.getElementById('trayMastered') };
+
+function flipCard(e){
+  e.stopPropagation();
+  flipped = !flipped;
+  flipInner.classList.toggle('flipped', flipped);
+}
+
+let dragging = false, startX = 0, startY = 0, dx = 0, dy = 0;
+
+card.addEventListener('pointerdown', (e)=>{
+  if(e.target.closest('.flipbtn')) return;
+  dragging = true;
+  card.classList.add('dragging');
+  startX = e.clientX; startY = e.clientY;
+  card.setPointerCapture(e.pointerId);
+});
+
+card.addEventListener('pointermove', (e)=>{
+  if(!dragging) return;
+  dx = e.clientX - startX; dy = e.clientY - startY;
+  const rot = dx * 0.04;
+  card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+  Object.values(zones).forEach(z=>z.classList.remove('on'));
+  Object.values(trays).forEach(t=>t.className = 'tray');
+  const threshold = 40;
+  if(Math.abs(dx) > Math.abs(dy) && dx < -threshold){
+    zones.review.classList.add('on'); trays.review.className = 'tray hover-review';
+  } else if(Math.abs(dx) > Math.abs(dy) && dx > threshold){
+    zones.mastered.classList.add('on'); trays.mastered.className = 'tray hover-mastered';
+  } else if(dy > threshold && Math.abs(dy) > Math.abs(dx)){
+    zones.catalog.classList.add('on'); trays.catalog.className = 'tray hover-catalog';
+  }
+});
+
+card.addEventListener('pointerup', (e)=>{
+  if(!dragging) return;
+  dragging = false;
+  card.classList.remove('dragging');
+  const releaseThreshold = 90;
+  Object.values(zones).forEach(z=>z.classList.remove('on'));
+  Object.values(trays).forEach(t=>t.className = 'tray');
+  if(Math.abs(dx) > Math.abs(dy) && dx < -releaseThreshold){
+    file('review');
+  } else if(Math.abs(dx) > Math.abs(dy) && dx > releaseThreshold){
+    file('mastered');
+  } else if(dy > releaseThreshold && Math.abs(dy) > Math.abs(dx)){
+    file('catalog');
+  } else {
+    card.style.transform = '';
+  }
+  dx = 0; dy = 0;
+});
+
+function file(kind){
+  const moves = {
+    review: 'translateX(-160%) rotate(-16deg)',
+    mastered: 'translateX(160%) rotate(16deg)',
+    catalog: 'translateY(160%) scale(.85)'
+  };
+  const pulseClass = { review:'pulse-review', catalog:'pulse-catalog', mastered:'pulse-mastered' };
+  card.style.transition = 'transform .38s cubic-bezier(.2,0,0,1), opacity .32s';
+  card.style.transform = moves[kind];
+  card.style.opacity = '0';
+  trays[kind].classList.add(pulseClass[kind]);
+  setTimeout(()=>{ trays[kind].className = 'tray'; }, 500);
+  setTimeout(()=>{
+    card.style.transition = 'none';
+    card.style.transform = '';
+    card.style.opacity = '1';
+    flipped = false;
+    flipInner.classList.remove('flipped');
+    void card.offsetWidth;
+    card.style.transition = '';
+  }, 380);
+}
+
+document.querySelectorAll('.spine').forEach(s=>{
+  s.addEventListener('click', ()=>{
+    document.querySelectorAll('.spine').forEach(x=>x.classList.remove('active'));
+    s.classList.add('active');
+    document.getElementById('shelfName').textContent = s.dataset.shelf + ' — Module 3';
+  });
+});
+
+function toggleTheme(){
+  const b = document.body;
+  const isDark = b.getAttribute('data-theme') === 'dark';
+  b.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+}
+</script>
+</body>
+</html>
