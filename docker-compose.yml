@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - INSTACLONE_URL=http://instaclone:8100
+    volumes:
+      - ./backend:/app
+      - ./instaclone:/instaclone
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir /app
+
+  instaclone:
+    build:
+      context: ./instaclone
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./instaclone:/app
+      - ./seed:/seed:ro
+    command: uvicorn app:app --host 0.0.0.0 --port 8100 --app-dir /app
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    volumes:
+      - ./dashboard:/app
+    command: streamlit run studyreel_dashboard.py --server.port 8501 --server.address 0.0.0.0

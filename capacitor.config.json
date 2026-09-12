@@ -1,0 +1,16 @@
+{
+  "appId": "ai.studyreel.app",
+  "appName": "StudyReel",
+  "webDir": "instaclone",
+  "server": {
+    "url": "http://10.0.2.2:8100",
+    "cleartext": true,
+    "androidScheme": "http"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#0a0e1a"
+    }
+  }
+}
