@@ -1,0 +1,269 @@
+[
+  {
+    "post_id": "seed016704",
+    "media_id": "seed016704",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed016704/slide_01.png",
+        "header": "Attention Is All You Need"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed016704/slide_02.png",
+        "header": "Q K V in Attention"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed016704/slide_03.png",
+        "header": "Multi-Head Magic"
+      }
+    ],
+    "caption": "Attention is all you need! Transformers weigh every token against every other \u2014 no recurrence needed. How does Q\u00b7K\u1d40 decide what to focus on? Save for your AI exam!",
+    "hashtags": [
+      "ai",
+      "transformer",
+      "attention",
+      "machinelearning",
+      "deeplearning",
+      "exam"
+    ],
+    "cover_slide": 1,
+    "likes": 142,
+    "views": 890,
+    "created_at": "2026-09-11T13:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed02f78f",
+    "media_id": "seed02f78f",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed02f78f/slide_01.png",
+        "header": "RAG: Grounded LLMs"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed02f78f/slide_02.png",
+        "header": "RAG Pipeline"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed02f78f/slide_03.png",
+        "header": "When to Use RAG"
+      }
+    ],
+    "caption": "Stop hallucinations! RAG grounds LLMs in your own docs \u2014 chunk, embed, retrieve, generate with citations. Would you use RAG or fine-tune?",
+    "hashtags": [
+      "ai",
+      "rag",
+      "llm",
+      "vectordb",
+      "generativeai",
+      "studyreel"
+    ],
+    "cover_slide": 1,
+    "likes": 118,
+    "views": 720,
+    "created_at": "2026-09-11T07:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed03f33f",
+    "media_id": "seed03f33f",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed03f33f/slide_01.png",
+        "header": "BLDC vs Brushed"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed03f33f/slide_02.png",
+        "header": "3-Phase Inverter"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed03f33f/slide_03.png",
+        "header": "Torque Control"
+      }
+    ],
+    "caption": "Why every EV uses BLDC? High torque, no brushes, precise control via inverter. Save this for Electrical Machines!",
+    "hashtags": [
+      "ev",
+      "bldc",
+      "electricvehicle",
+      "motors",
+      "engineering"
+    ],
+    "cover_slide": 1,
+    "likes": 105,
+    "views": 640,
+    "created_at": "2026-09-11T01:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed044c05",
+    "media_id": "seed044c05",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed044c05/slide_01.png",
+        "header": "Battery Pack 101"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed044c05/slide_02.png",
+        "header": "SOC Estimation"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed044c05/slide_03.png",
+        "header": "Cell Balancing"
+      }
+    ],
+    "caption": "BMS is the brain of EV batteries \u2014 balancing, thermal, SOC. One bad cell can kill range. Know your pack!",
+    "hashtags": [
+      "ev",
+      "battery",
+      "bms",
+      "lithium",
+      "engineering",
+      "tech"
+    ],
+    "cover_slide": 0,
+    "likes": 98,
+    "views": 590,
+    "created_at": "2026-09-10T19:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed05c232",
+    "media_id": "seed05c232",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed05c232/slide_01.png",
+        "header": "Lift Explained"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed05c232/slide_02.png",
+        "header": "Drag Types"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed05c232/slide_03.png",
+        "header": "Polar Curve"
+      }
+    ],
+    "caption": "Lift vs Drag \u2014 Bernoulli + Newton together. Why cambered airfoils fly? Save for Aerodynamics!",
+    "hashtags": [
+      "aerodynamics",
+      "lift",
+      "drag",
+      "aerospace",
+      "physics"
+    ],
+    "cover_slide": 0,
+    "likes": 87,
+    "views": 520,
+    "created_at": "2026-09-10T13:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed06a33d",
+    "media_id": "seed06a33d",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed06a33d/slide_01.png",
+        "header": "V-Speeds"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed06a33d/slide_02.png",
+        "header": "Ground Roll"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed06a33d/slide_03.png",
+        "header": "Rotation Physics"
+      }
+    ],
+    "caption": "Takeoff is controlled stall \u2014 VR, rotate, V2. How does 300 tons lift off in 40 seconds?",
+    "hashtags": [
+      "aerodynamics",
+      "takeoff",
+      "aviation",
+      "flight",
+      "physics"
+    ],
+    "cover_slide": 2,
+    "likes": 76,
+    "views": 460,
+    "created_at": "2026-09-10T07:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed07b74d",
+    "media_id": "seed07b74d",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed07b74d/slide_01.png",
+        "header": "FCFS & SJF"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed07b74d/slide_02.png",
+        "header": "Round Robin"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed07b74d/slide_03.png",
+        "header": "Priority & Starvation"
+      }
+    ],
+    "caption": "CPU Scheduling decides who runs next \u2014 FCFS vs SJF vs Round Robin. Which starves? Save for OS exam!",
+    "hashtags": [
+      "operatingsystem",
+      "scheduling",
+      "os",
+      "computerscience",
+      "exam"
+    ],
+    "cover_slide": 1,
+    "likes": 68,
+    "views": 410,
+    "created_at": "2026-09-10T01:57:41.121575+00:00"
+  },
+  {
+    "post_id": "seed08ba86",
+    "media_id": "seed08ba86",
+    "slides": [
+      {
+        "slide_number": 1,
+        "image_path": "/slides/seed08ba86/slide_01.png",
+        "header": "Why Index?"
+      },
+      {
+        "slide_number": 2,
+        "image_path": "/slides/seed08ba86/slide_02.png",
+        "header": "B+ Tree vs Hash"
+      },
+      {
+        "slide_number": 3,
+        "image_path": "/slides/seed08ba86/slide_03.png",
+        "header": "Covering Index"
+      }
+    ],
+    "caption": "Indexing makes DB fast \u2014 B+ tree vs Hash. Why does LIKE '%a%' kill your index? Save this!",
+    "hashtags": [
+      "dbms",
+      "indexing",
+      "database",
+      "sql",
+      "computerscience"
+    ],
+    "cover_slide": 1,
+    "likes": 55,
+    "views": 340,
+    "created_at": "2026-09-09T19:57:41.121575+00:00"
+  }
+]
