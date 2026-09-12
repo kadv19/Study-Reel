@@ -27,6 +27,15 @@ class MicroTopic(BaseModel):
     language_tag: Optional[str] = Field(
         None, description="Pygments lexer name, must be in ALLOWED_LANGUAGES"
     )
+    back_header: Optional[str] = Field(
+        None, max_length=30, description="Back title, e.g. 'Why it matters' <=30"
+    )
+    back_body: Optional[str] = Field(
+        None, max_length=140, description="Back explanation <=140, exam relevance"
+    )
+    exam_weight: Optional[Literal["low", "medium", "high"]] = Field(
+        None, description="1 low 2 medium 3 high exam weight"
+    )
 
     @field_validator("code_block")
     @classmethod
@@ -154,6 +163,87 @@ class PublishRequest(BaseModel):
     carousel_id: int = Field(..., description="Carousel row id from the render endpoint")
     caption: str = Field("", max_length=2200)
     hashtags: list[str] = Field(default_factory=list)
+    cover_slide: int = Field(0, ge=0, description="Cover slide index, 0-based")
     schedule_at: Optional[str] = Field(
         None, description="ISO datetime to publish later; omit for immediate publish"
     )
+
+
+class MetadataPreviewRequest(BaseModel):
+    """Body for POST /api/v2/metadata/preview — tailored caption preview."""
+
+    module_name: str = Field(..., max_length=60)
+    topics: list[MicroTopic] = Field(..., min_length=1, max_length=10)
+
+
+# ---- Card Catalog models (PDF §3) ---------------------------------------
+
+
+class CardStatus(str):
+    unfiled = "unfiled"
+    review = "review"
+    catalog = "catalog"
+    mastered = "mastered"
+
+
+class UserCardState(BaseModel):
+    user_id: str = Field(..., description="anon id or auth sub; no auth yet => X-User-Id fallback")
+    post_id: str
+    slide_index: int = Field(..., ge=0)
+    status: Literal["unfiled", "review", "catalog", "mastered"] = "unfiled"
+    filed_at: Optional[str] = None
+    last_shown_at: Optional[str] = None
+
+
+class FileCardRequest(BaseModel):
+    post_id: str
+    slide_index: int = Field(..., ge=0)
+    status: Literal["review", "catalog", "mastered"]
+
+
+# ---- Pseudonymous accounts (C) — name + college dropdown + email ----------
+
+ALLOWED_COLLEGES = {
+    "vtu_belgaum", "bmsce", "rvce", "pes_university", "msrit", "dsce", "other",
+}
+
+COLLEGE_LABELS = {
+    "vtu_belgaum": "VTU Belgaum",
+    "bmsce": "BMSCE",
+    "rvce": "RVCE",
+    "pes_university": "PES University",
+    "msrit": "MSRIT",
+    "dsce": "DSCE",
+    "other": "Other",
+}
+
+
+class UserCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    email: str = Field(..., max_length=120)
+    college: str = Field(..., description="college code, must be in ALLOWED_COLLEGES")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
+        return v
+
+    @field_validator("college")
+    @classmethod
+    def validate_college(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ALLOWED_COLLEGES:
+            raise ValueError(f"college must be one of {sorted(ALLOWED_COLLEGES)}")
+        return v
+
+
+class UserOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    college: str
+    created_at: str
+    updated_at: str

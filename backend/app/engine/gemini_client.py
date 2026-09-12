@@ -44,6 +44,9 @@ Rules:
 - code_block: optional; include only when code directly improves understanding of the syllabus concept.
 - code_block: max 22 lines and max 62 characters per line.
 - language_tag: use only one of: python, java, cpp, c, js, sql, kotlin, go, bash, html, css.
+- back_header: optional, short back-side prompt, max 30 chars, e.g. "Why it matters" or "Draw the Gantt chart".
+- back_body: optional, exam-focused elaboration, max 140 chars, what VTU asks (diagram, formula, trap). Must be derivable from syllabus.
+- exam_weight: optional, one of "low","medium","high" — 1 rarely asked .. 3 frequently asked / high-mark. Default "medium".
 - Never use a language_tag that does not match the code_block.
 - When code is CSS, use language_tag "css"; when code is HTML, use "html". Do not label CSS as HTML.
 - If the syllabus requests a language not present in the language_tag whitelist, do not invent a different language; explain the concept without code.
@@ -56,7 +59,7 @@ Rules:
 - No preamble, no explanation, no markdown fence — output ONLY valid JSON.
 """
 
-CACHE_SCHEMA_VERSION = "v2"
+CACHE_SCHEMA_VERSION = "v3"
 
 
 def _hash(text: str) -> str:
@@ -173,7 +176,7 @@ class GeminiClient:
             f"Respond with ONLY a JSON object of the form {{\"topics\": [ ... ] }}. "
             f"Each element of the array must have exactly these keys: header "
             f"(string, max 30 chars), body (string, max 140 chars), code_block "
-            f"(string or null), language_tag (string or null)."
+            f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null)."
         )
 
         try:
