@@ -26,7 +26,7 @@ from app.publisher.store import (
     save_published_post,
     save_scheduled_post,
 )
-from app.schemas import Carousel, PostMetadata, PublishRequest
+from app.schemas import Carousel, MetadataPreviewRequest, MicroTopic, PostMetadata, PublishRequest
 
 router = APIRouter(prefix="/api/v2", tags=["publish"])
 
@@ -37,6 +37,29 @@ def _db_path() -> str | None:
 
 _scheduler_started = False
 _scheduler_lock = threading.Lock()
+
+
+@router.post("/metadata/preview")
+def metadata_preview(payload: MetadataPreviewRequest) -> dict:
+    """Tailored caption/hashtags/cover for a module — no publish, just preview."""
+    try:
+        from app.engine.post_metadata import generate_post_metadata
+        meta = generate_post_metadata(payload.module_name, payload.topics)
+        return meta.model_dump()
+    except Exception as exc:
+        # Fallback tailored template (no API key / quota)
+        fallback_hashtags = ["studyreel","exam","learn"]
+        # derive 3-5 from module_name words
+        for w in payload.module_name.lower().replace(":"," ").split():
+            if len(w) > 3 and w not in fallback_hashtags and len(fallback_hashtags) < 6:
+                fallback_hashtags.append(w[:16])
+        # cover: prefer code slide else 0
+        cover = next((i for i, t in enumerate(payload.topics) if t.code_block), 0)
+        return PostMetadata(
+            caption=f"{payload.module_name} — key concepts you need to know! Save this carousel for your exam. Follow @StudyReel for daily CS content!",
+            hashtags=fallback_hashtags[:6],
+            cover_slide=cover,
+        ).model_dump()
 
 
 @router.post("/publish")
@@ -50,8 +73,10 @@ def publish(payload: PublishRequest) -> dict:
 
     carousel = Carousel(**record["carousel"])
     output_dir = __import__("pathlib").Path(record["output_dir"])
+    # cover_slide from client (tailored), fallback to 0 with bounds check
+    cover = payload.cover_slide if 0 <= payload.cover_slide < len(carousel.slides) else 0
     metadata = PostMetadata(
-        caption=payload.caption, hashtags=payload.hashtags, cover_slide=0
+        caption=payload.caption, hashtags=payload.hashtags, cover_slide=cover
     )
 
     if payload.schedule_at:

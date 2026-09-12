@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -25,9 +26,20 @@ from app.ingestion.pipeline import process_pdf
 from app.renderer.render import render_carousel
 from app.schemas import Carousel, MicroTopic, Slide, Syllabus
 from app.api_v2 import router as api_v2_router, start_scheduler
+from app.api_catalog import router as catalog_router
+from app.api_users import router as users_router
 
 app = FastAPI(title="StudyReel Backend", version="0.3.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8100","http://localhost:8100","http://127.0.0.1:8501","http://localhost:8501","*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(api_v2_router)
+app.include_router(catalog_router)
+app.include_router(users_router)
 
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
 RENDER_DIR = Path(__file__).resolve().parents[2] / "renders"
