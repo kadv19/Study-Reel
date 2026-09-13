@@ -13,10 +13,10 @@
     </h1>
   </div>
 
-  <!-- Body Explanation Card -->
+  <!-- Body Explanation Card — auto-scale for longer detailed text -->
   <div class="glass-card-glow rounded-xl p-5 relative overflow-hidden">
     <div class="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-cyan-400 to-indigo-500"></div>
-    <p class="text-lg sm:text-xl text-slate-200 font-normal leading-relaxed break-word-safe line-clamp-4">
+    <p class="{% if slide.body|length > 110 %}text-base{% else %}text-lg sm:text-xl{% endif %} text-slate-200 font-normal leading-relaxed break-word-safe {% if slide.body|length > 130 %}line-clamp-6{% else %}line-clamp-4{% endif %}">
       {{ slide.body }}
     </p>
   </div>

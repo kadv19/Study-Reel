@@ -16,6 +16,27 @@ MAX_CODE_LINES = 22
 MAX_CODE_LINE_LEN = 62
 
 
+class Diagram(BaseModel):
+    """Simple block diagram: up to 6 nodes and edges as [source, target] pairs."""
+    nodes: list[str] = Field(..., min_length=1, max_length=6, description="Node labels, max 6")
+    edges: list[list[str]] = Field(default_factory=list, description="Edges as [from, to] pairs")
+
+    @field_validator("edges")
+    @classmethod
+    def validate_edges(cls, v: list[list[str]]) -> list[list[str]]:
+        for e in v:
+            if not isinstance(e, list) or len(e) != 2:
+                raise ValueError("each edge must be [source, target]")
+            if not all(isinstance(x, str) and x.strip() for x in e):
+                raise ValueError("edge nodes must be non-empty strings")
+        return [[a.strip(), b.strip()] for a, b in v]
+
+    @field_validator("nodes")
+    @classmethod
+    def validate_nodes(cls, v: list[str]) -> list[str]:
+        return [n.strip() for n in v if n.strip()]
+
+
 class MicroTopic(BaseModel):
     """One micro-lesson chunk, as produced by the AI engine."""
 
@@ -35,6 +56,9 @@ class MicroTopic(BaseModel):
     )
     exam_weight: Optional[Literal["low", "medium", "high"]] = Field(
         None, description="1 low 2 medium 3 high exam weight"
+    )
+    diagram: Optional[Diagram] = Field(
+        None, description="Optional block diagram: nodes + edges, max 6 nodes"
     )
 
     @field_validator("code_block")
@@ -77,7 +101,7 @@ class MicroTopic(BaseModel):
 class Slide(BaseModel):
     """A single rendered slide. slide_type drives which Jinja2 template is used."""
 
-    slide_type: Literal["text", "code", "mixed"] = "text"
+    slide_type: Literal["text", "code", "mixed", "diagram"] = "text"
     index: int = Field(..., ge=0)
     topic: MicroTopic
 
@@ -88,7 +112,7 @@ class Carousel(BaseModel):
     carousel_id: str = Field(..., min_length=1)
     module_name: str = Field(..., max_length=60)
     subject_code: Optional[str] = Field(None, max_length=20)
-    slides: list[Slide] = Field(min_length=1, max_length=10)
+    slides: list[Slide] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def enforce_ordered_indices(self) -> "Carousel":
@@ -173,7 +197,7 @@ class MetadataPreviewRequest(BaseModel):
     """Body for POST /api/v2/metadata/preview — tailored caption preview."""
 
     module_name: str = Field(..., max_length=60)
-    topics: list[MicroTopic] = Field(..., min_length=1, max_length=10)
+    topics: list[MicroTopic] = Field(..., min_length=1, max_length=20)
 
 
 # ---- Card Catalog models (PDF §3) ---------------------------------------
@@ -201,20 +225,16 @@ class FileCardRequest(BaseModel):
     status: Literal["review", "catalog", "mastered"]
 
 
-# ---- Pseudonymous accounts (C) — name + college dropdown + email ----------
+# ---- Real authentication (NIE / VVCE / SJCE) ------------------------------
 
 ALLOWED_COLLEGES = {
-    "vtu_belgaum", "bmsce", "rvce", "pes_university", "msrit", "dsce", "other",
+    "NIE", "VVCE", "SJCE",
 }
 
 COLLEGE_LABELS = {
-    "vtu_belgaum": "VTU Belgaum",
-    "bmsce": "BMSCE",
-    "rvce": "RVCE",
-    "pes_university": "PES University",
-    "msrit": "MSRIT",
-    "dsce": "DSCE",
-    "other": "Other",
+    "NIE": "NIE",
+    "VVCE": "VVCE",
+    "SJCE": "SJCE",
 }
 
 
@@ -234,7 +254,7 @@ class UserCreate(BaseModel):
     @field_validator("college")
     @classmethod
     def validate_college(cls, v: str) -> str:
-        v = v.strip().lower()
+        v = v.strip().upper()
         if v not in ALLOWED_COLLEGES:
             raise ValueError(f"college must be one of {sorted(ALLOWED_COLLEGES)}")
         return v
@@ -247,3 +267,53 @@ class UserOut(BaseModel):
     college: str
     created_at: str
     updated_at: str
+
+
+class SignupRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    email: str = Field(..., max_length=120)
+    college: str = Field(..., description="college code, must be one of NIE, VVCE, SJCE")
+    password: str = Field(..., min_length=6, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
+        return v
+
+    @field_validator("college")
+    @classmethod
+    def validate_college(cls, v: str) -> str:
+        v = v.strip().upper()
+        if v not in ALLOWED_COLLEGES:
+            raise ValueError(f"college must be one of {sorted(ALLOWED_COLLEGES)}")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name required")
+        return v
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., max_length=120)
+    password: str = Field(..., min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
+        return v
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user_id: str
+    user: UserOut

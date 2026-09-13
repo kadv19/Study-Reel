@@ -1,9 +1,11 @@
 // Cabinet: fetch drawers from GET /api/v1/cabinet?tray=... (Got it display, mastered enum)
-const BACKEND = localStorage.getItem('backend_url') || 'http://127.0.0.1:8000';
-let USER_ID = localStorage.getItem('sr_user_id') || 'anon';
+try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
+const BACKEND = '';
+let USER_ID = localStorage.getItem('sr_user_real_id') || localStorage.getItem('sr_user_id') || 'anon';
 const REAL_ID = localStorage.getItem('sr_user_real_id') || null;
+const TOKEN = localStorage.getItem('sr_session_token') || '';
 if(REAL_ID) USER_ID = REAL_ID;
-function headers(){ const id = REAL_ID || USER_ID; return {'X-User-Id': id}; }
+function headers(){ const id = REAL_ID || USER_ID; const h={'X-User-Id': id}; if(TOKEN) h['Authorization']='Bearer '+TOKEN; return h; }
 
 async function loadDrawer(tray){
   const id = `list-${tray}`;

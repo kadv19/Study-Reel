@@ -5,8 +5,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
-from fastapi import FastAPI, HTTPException, Query, status
-from fastapi.responses import FileResponse, HTMLResponse
+import httpx
+from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -142,6 +143,14 @@ def serve_feed_legacy() -> HTMLResponse:
 
 DECK_HTML = BASE_DIR / "deck.html"
 CABINET_HTML = BASE_DIR / "cabinet.html"
+UPLOAD_HTML = BASE_DIR / "upload.html"
+AUTH_HTML = BASE_DIR / "auth.html"
+
+@app.get("/auth", response_class=HTMLResponse)
+def serve_auth() -> HTMLResponse:
+    if AUTH_HTML.exists():
+        return HTMLResponse(content=AUTH_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="auth.html not found")
 
 @app.get("/deck", response_class=HTMLResponse)
 def serve_deck() -> HTMLResponse:
@@ -155,12 +164,49 @@ def serve_cabinet() -> HTMLResponse:
         return HTMLResponse(content=CABINET_HTML.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404, detail="cabinet.html not found")
 
+@app.get("/upload", response_class=HTMLResponse)
+def serve_upload() -> HTMLResponse:
+    if UPLOAD_HTML.exists():
+        return HTMLResponse(content=UPLOAD_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="upload.html not found")
+
 @app.get("/", response_class=HTMLResponse)
 def serve_root() -> HTMLResponse:
     # Card Catalog is now primary (deck), old feed kept at /feed for cold-start
     if DECK_HTML.exists():
         return HTMLResponse(content=DECK_HTML.read_text(encoding="utf-8"))
     return HTMLResponse(content=FEED_HTML.read_text(encoding="utf-8") if FEED_HTML.exists() else "<h1>StudyReel</h1>")
+
+
+# ---- Proxy backend API (single tunnel) ------------------------------------
+# Any /api/v1/* or /api/v2/* not handled locally is forwarded to backend 8000.
+# This collapses two tunnels into one: phone -> instaclone 8100 -> backend 8000.
+
+BACKEND_URL = "http://127.0.0.1:8000"
+
+
+async def _proxy(request: Request) -> Response:
+    url = f"{BACKEND_URL}{request.url.path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+    # forward headers except hop-by-hop
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length", "connection")}
+    body = await request.body()
+    async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+        resp = await client.request(request.method, url, headers=headers, content=body)
+        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection"}
+        headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+        return Response(content=resp.content, status_code=resp.status_code, headers=headers, media_type=resp.headers.get("content-type"))
+
+
+@app.api_route("/api/v1/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def proxy_v1(path: str, request: Request) -> Response:
+    return await _proxy(request)
+
+
+@app.api_route("/api/v2/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def proxy_v2(path: str, request: Request) -> Response:
+    return await _proxy(request)
 
 
 @app.get("/api/media")

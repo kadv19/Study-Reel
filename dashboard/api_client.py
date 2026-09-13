@@ -32,7 +32,9 @@ def fetch_pipeline_status(base_url: str) -> dict:
 def upload_syllabus_pdf(base_url: str, filename: str, content: bytes) -> dict:
     """Upload syllabus PDF to backend ingestion endpoint."""
     files = {"file": (filename, content, "application/pdf")}
-    res = requests.post(f"{base_url}/api/v1/syllabus/upload", files=files, timeout=30)
+    # dashboard upload now sends a fixed owner header so the privacy filter keeps it visible to the dashboard pseudo-user
+    headers = {"X-User-Id": "dashboard"}
+    res = requests.post(f"{base_url}/api/v1/syllabus/upload", files=files, headers=headers, timeout=30)
     if res.status_code == 200:
         return res.json()
     raise RuntimeError(f"Upload failed with status {res.status_code}: {res.text}")

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>StudyReel — Upload</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#0a0e1a">
+<script>try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}</script>
+<style>
+  :root{ --bg:#0a0e1a; --surface:#0f1729; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; }
+  [data-theme="light"]{ --bg:#eef1f6; --surface:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; padding:12px 12px max(12px, env(safe-area-inset-bottom)); min-height:100dvh; background-image: radial-gradient(circle at 15% 8%, color-mix(in srgb, var(--cyan) 10%, transparent), transparent 45%), radial-gradient(circle at 90% 85%, color-mix(in srgb, var(--indigo) 10%, transparent), transparent 40%); }
+  .mono{font-family:'Fira Code',monospace;} .serif{font-family:'Fraunces',serif;}
+  .wrap{width:100%; max-width:400px; display:flex; flex-direction:column; min-height:calc(100dvh - 24px);}
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-top:env(safe-area-inset-top);}
+  .word{font-family:'Fraunces',serif; font-weight:600; font-size:20px; letter-spacing:-0.01em;}
+  .tagline{font-size:11px; color:var(--muted); font-style:italic;}
+  .themebtn{border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:20px; width:44px; height:44px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .navlink{font-size:11px; color:var(--muted); text-decoration:none; border:1px solid var(--border); padding:6px 10px; border-radius:20px; background:var(--surface);}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:16px; box-shadow:0 8px 24px rgba(0,0,0,.2);}
+  .card h3{font-family:'Fraunces',serif; font-size:16px; margin:0 0 8px;}
+  .card p{font-size:12.5px; color:var(--muted); margin:0 0 12px; line-height:1.5;}
+  .btn{width:100%; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:700; font-size:13px; cursor:pointer; min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px;}
+  .btn:disabled{opacity:0.5; cursor:not-allowed;}
+  .file-input{width:100%; padding:12px; border:1px dashed var(--border); border-radius:12px; background:var(--bg); color:var(--text); font-size:13px; text-align:center; cursor:pointer; display:block;}
+  .file-input.has-file{border-style:solid; border-color:var(--cyan); background:color-mix(in srgb, var(--cyan) 8%, var(--bg));}
+  .select{width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px;}
+  .stepper{display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:6px;}
+  .stepper button{width:36px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .stepper .val{flex:1; text-align:center; font-weight:700; font-size:14px;}
+  .status-bar{padding:10px 12px; background:color-mix(in srgb, var(--cyan) 10%, transparent); border:1px solid color-mix(in srgb, var(--cyan) 20%, transparent); border-radius:10px; font-size:12px; margin-top:12px; display:flex; align-items:center; gap:8px;}
+  .progress{height:6px; background:var(--border); border-radius:9999px; overflow:hidden; margin-top:8px;}
+  .progress-bar{height:100%; background:linear-gradient(90deg,var(--cyan),var(--indigo)); width:0%; transition:width 0.3s;}
+  .logbox{margin-top:10px; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px; font-size:11px; color:var(--muted); max-height:120px; overflow-y:auto; font-family:'Fira Code',monospace; line-height:1.4;}
+</style>
+</head>
+<body data-theme="dark">
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <div class="word">StudyReel</div>
+      <div class="tagline">upload → auto-tailor → publish</div>
+    </div>
+     <div style="display:flex; gap:8px; align-items:center;">
+      <a class="navlink" href="/deck">My Library →</a>
+      <a class="navlink" href="#" onclick="localStorage.removeItem('sr_session_token'); localStorage.removeItem('sr_user_real_id'); location.href='/auth'; return false;">Log out</a>
+      <button class="themebtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+    </div>
+  </div>
+
+  <!-- Upload form -->
+  <div class="card" id="formCard">
+    <h3>📄 Upload Syllabus</h3>
+    <p>Choose your syllabus PDF and optional notes. Pick how you want it tailored — we’ll handle the rest.</p>
+
+    <label class="file-input" for="syllabusFile" id="syllabusLabel">
+      <span id="syllabusName">Tap to choose syllabus PDF *</span>
+      <input type="file" id="syllabusFile" accept="application/pdf" style="display:none">
+    </label>
+    <div style="height:10px"></div>
+    <label class="file-input" for="resourceFile" id="resourceLabel">
+      <span id="resourceName">Module notes / resources (optional)</span>
+      <input type="file" id="resourceFile" accept="application/pdf" style="display:none">
+    </label>
+
+    <div style="margin-top:14px; display:flex; flex-direction:column; gap:10px;">
+      <div>
+        <label style="font-size:11px; color:var(--muted); font-weight:600;">Depth & Format</label>
+        <select id="depthSelect" class="select" style="margin-top:4px;">
+          <option value="detailed">Detailed — full explanations + resources</option>
+          <option value="short">Short & Crisp — ultra concise</option>
+          <option value="diagram">Diagram only — block diagram per slide</option>
+          <option value="both">Both — prose + diagram</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px; color:var(--muted); font-weight:600;">Tone</label>
+        <select id="toneSelect" class="select" style="margin-top:4px;">
+          <option value="default">Default — balanced</option>
+          <option value="eli5">Explain like I'm 5 — simple & analogies</option>
+          <option value="professional">Professional — exam-ready, precise</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px; color:var(--muted); font-weight:600;">Slides per module</label>
+        <div class="stepper" style="margin-top:4px;">
+          <button type="button" onclick="stepSlide(-1)">−</button>
+          <span class="val" id="slideCountVal">10</span>
+          <button type="button" onclick="stepSlide(1)">+</button>
+        </div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:4px; text-align:center;">5 — 20 slides</div>
+      </div>
+    </div>
+
+    <button class="btn" id="generateBtn" style="margin-top:14px;" disabled>Upload & Auto-Publish</button>
+    <div id="formStatus" style="font-size:11.5px; color:var(--muted); margin-top:8px;"></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="card" id="progressCard" style="display:none">
+    <h3>⏳ Publishing to your Library</h3>
+    <div class="progress"><div class="progress-bar" id="overallBar"></div></div>
+    <div id="overallText" style="font-size:12px; color:var(--muted); margin-top:8px;">Starting…</div>
+    <div class="logbox" id="logBox" style="display:none"></div>
+  </div>
+
+  <!-- Done -->
+  <div class="card" id="doneCard" style="display:none; text-align:center;">
+    <h3>✅ All done!</h3>
+    <p id="doneMsg">Your Book is ready in My Library.</p>
+    <a href="/deck" class="btn" style="text-decoration:none; margin-top:8px;">📚 Open My Library →</a>
+  </div>
+
+</div>
+<script src="/static/upload.js"></script>
+<script>
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
+function toggleTheme(){ const b=document.body; const d=b.getAttribute('data-theme')==='dark'; b.setAttribute('data-theme', d?'light':'dark'); document.getElementById('themeBtn').textContent=d?'☀️':'🌙'; }
+</script>
+</body>
+</html>

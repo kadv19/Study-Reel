@@ -189,8 +189,8 @@ with tabs[1]:
                     line_cnt = len(new_c.strip().splitlines())
                     longest = max(len(l) for l in new_c.strip().splitlines()) if new_c.strip() else 0
                     st.caption(f"{line_cnt}/22 lines · longest {longest}/62")
-                lang_opts = ["", "python", "java", "cpp", "c", "js", "sql", "kotlin", "go", "bash", "html", "css"]
-                new_lang = st.selectbox("Language Tag", options=lang_opts, index=lang_opts.index(t["language_tag"]) if t["language_tag"] else 0, key=f"l_{i}")
+                # language_tag selector removed — StudyReel auth gate is now primary flow, no per-topic lexer editing needed
+                new_lang = t.get("language_tag")
                 ew = t.get("exam_weight") or "medium"
                 ew_opts = ["low","medium","high"]
                 new_ew = st.selectbox("Exam weight", options=ew_opts, index=ew_opts.index(ew) if ew in ew_opts else 1, key=f"ew_{i}", help="1 low 2 medium 3 high — drives shelf fill & dots")

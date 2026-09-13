@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <meta name="theme-color" content="#0a0e1a">
+<script>try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}</script>
 <style>
   :root{ --bg:#0a0e1a; --surface:#0f1729; --card:#fffdf6; --card-ink:#2a2116; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; --wood-1:#5a4636; --wood-2:#3c2f24; --wood-3:#2a2019; --brass:#c9a15a; --brass-dark:#8a6a35; }
   [data-theme="light"]{ --bg:#eef1f6; --surface:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; --wood-1:#8a6f52; --wood-2:#6e5540; --wood-3:#5a4433; }
@@ -88,7 +89,12 @@
       <div class="drawer-inside"><div class="inside-pad" id="list-mastered"><div class="empty-note">Loading…</div></div></div>
     </div>
   </div>
+  <div style="text-align:center; font-size:11px; color:var(--muted); margin-top:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+    <span>Signed in as <strong id="cabUser" style="color:var(--text)"></strong></span>
+    <a href="#" onclick="localStorage.removeItem('sr_session_token'); localStorage.removeItem('sr_user_real_id'); location.href='/auth'; return false;" style="color:var(--cyan); text-decoration:none; border:1px solid var(--border); padding:4px 10px; border-radius:9999px; background:var(--surface);">Log out</a>
+  </div>
 </div>
+<script>try{ const n=localStorage.getItem('sr_user_name')||localStorage.getItem('sr_user_real_id')||''; const el=document.getElementById('cabUser'); if(el) el.textContent=n; }catch{}</script>
 <script src="/static/cabinet.js"></script>
 <script>
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }

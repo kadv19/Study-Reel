@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex flex-col justify-between h-full py-4 max-w-[960px] mx-auto w-full">
+
+  <!-- Slide Header -->
+  <div class="space-y-3">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 font-mono text-xs uppercase tracking-wider">
+      <span>Diagram</span>
+    </div>
+    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight break-word-safe">
+      {{ slide.header }}
+    </h1>
+  </div>
+
+  <!-- Diagram — constrained height, scales for many nodes -->
+  {% if slide.diagram_svg %}
+  <div class="flex-1 flex items-center justify-center my-4 min-h-0 max-h-[560px] overflow-hidden">
+    <div class="w-full flex justify-center scale-[0.92] origin-center">
+      {{ slide.diagram_svg | safe }}
+    </div>
+  </div>
+  {% elif slide.diagram %}
+  <div class="flex-1 flex flex-col items-center justify-center gap-3 my-4 min-h-0 max-h-[560px] overflow-hidden">
+    <div class="flex flex-col items-center gap-2">
+      {% for node in slide.diagram.nodes %}
+      <div class="px-6 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold text-base min-w-[220px] text-center">{{ node }}</div>
+      {% if not loop.last %}<div class="text-cyan-400 text-xl">↓</div>{% endif %}
+      {% endfor %}
+    </div>
+    {% if slide.diagram.edges %}
+    <div class="mt-4 text-xs font-mono text-slate-400">Edges: {% for e in slide.diagram.edges %}{{ e[0] }} → {{ e[1] }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Body if present and not placeholder — auto-scale for long detailed text -->
+  {% if slide.body and slide.body != "See diagram" %}
+  <div class="glass-card-glow rounded-2xl p-6 relative overflow-hidden mb-4">
+    <div class="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-cyan-400 via-indigo-500 to-emerald-400"></div>
+    <p class="{% if slide.body|length > 110 %}text-lg{% else %}text-xl{% endif %} text-slate-100 font-medium leading-relaxed break-word-safe {% if slide.body|length > 130 %}line-clamp-5{% else %}line-clamp-4{% endif %}">
+      {{ slide.body }}
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- Code if present — capped height when diagram also present to avoid 1350 overflow -->
+  {% if slide.code %}
+  <div class="rounded-xl overflow-hidden border border-slate-700/80 bg-[#0c121e] shadow-xl flex flex-col max-h-[420px]">
+    <div class="flex items-center justify-between px-4 py-2 bg-[#111927] border-b border-slate-800">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#ff5f56]"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-[#27c93f]"></span>
+      </div>
+      <div class="px-2 py-0.5 rounded bg-slate-800 text-[11px] font-mono text-slate-400 uppercase">{{ slide.language.value if slide.language else topic.language.value }}</div>
+    </div>
+    <div class="p-3 bg-[#0a0f1a] overflow-hidden">{{ highlighted_code | safe }}</div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -7,8 +7,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <meta name="theme-color" content="#0a0e1a">
+<script>try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}</script>
 <style>
-  :root{ --bg:#0a0e1a; --surface:#0f1729; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; --wood:#3a2f26; }
+  :root{ --bg:#0a0e1a; --surface:#0f1729; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; --wood:#3a2f26; --wood-1:#4a3a2c; --wood-2:#3c2f24; --wood-3:#2a2019; --brass:#c9a15a; }
   [data-theme="light"]{ --bg:#eef1f6; --surface:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; }
   *{box-sizing:border-box;}
   body{ margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; padding:12px 12px max(12px, env(safe-area-inset-bottom)); min-height:100dvh; background-image: radial-gradient(circle at 15% 8%, color-mix(in srgb, var(--cyan) 10%, transparent), transparent 45%), radial-gradient(circle at 90% 85%, color-mix(in srgb, var(--indigo) 10%, transparent), transparent 40%); transition:background-color .3s,color .3s; }
@@ -19,20 +20,57 @@
   .tagline{font-size:11.5px; color:var(--muted); margin-top:3px; font-style:italic;}
   .themebtn{border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:20px; width:44px; height:44px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
   .cablink{font-size:11px; color:var(--muted); text-decoration:none; border:1px solid var(--border); padding:6px 10px; border-radius:20px; background:var(--surface);}
-  .shelfscroll{overflow-x:auto; padding:6px 2px 18px; margin-bottom:2px; scrollbar-width:none;}
+  /* Library */
+  .library-head{display:flex; align-items:baseline; justify-content:space-between; margin:10px 2px 8px;}
+  .library-head .title{font-family:'Fraunces',serif; font-size:18px; font-weight:600;}
+  .library-head .count{font-size:11px; color:var(--muted);}
+  .book-row{display:flex; gap:12px; overflow-x:auto; padding:8px 2px 14px; scrollbar-width:none; scroll-snap-type:x mandatory;}
+  .book-row::-webkit-scrollbar{display:none;}
+  .book-cover{flex:0 0 150px; height:196px; border-radius:14px; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 44px), linear-gradient(155deg, var(--wood-1), var(--wood-2) 55%, var(--wood-3)); border:1px solid rgba(255,255,255,0.06); box-shadow:0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06); padding:14px 12px 12px; cursor:pointer; scroll-snap-align:start; display:flex; flex-direction:column; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s;}
+  .book-cover:hover{transform:translateY(-3px); box-shadow:0 14px 28px rgba(0,0,0,0.42);}
+  .book-cover::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg,var(--cyan),var(--indigo)); opacity:0.9;}
+  .book-cover .cover-spine{position:absolute; top:0; bottom:0; left:4px; width:10px; background:rgba(0,0,0,0.18); border-right:1px solid rgba(255,255,255,0.04);}
+  .book-cover .cover-top{flex:1; padding-left:8px;}
+  .book-cover .cover-title{font-family:'Fraunces',serif; font-size:14.5px; font-weight:600; color:#f5ecd8; line-height:1.25; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; padding-left:6px;}
+  .book-cover .cover-sub{font-size:10px; color:rgba(245,236,216,0.55); margin-top:6px; padding-left:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .book-cover .cover-meta{padding-left:6px; margin-top:8px;}
+  .book-cover .cover-progress{height:4px; background:rgba(255,255,255,0.15); border-radius:9999px; overflow:hidden;}
+  .book-cover .cover-progress .fill{height:100%; background:linear-gradient(90deg,var(--cyan),var(--indigo)); border-radius:9999px; transition:width 0.3s;}
+  .book-cover .cover-foot{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
+  .book-cover .cover-foot .pct{font-size:11px; font-weight:700; color:var(--cyan);}
+  .book-cover .cover-foot .sheets{font-size:10px; color:rgba(245,236,216,0.6);}
+  .book-cover .cover-ring{position:absolute; top:10px; right:10px; width:38px; height:38px; border-radius:50%; background:conic-gradient(var(--cyan) var(--ring-pct,0%), rgba(255,255,255,0.13) 0); display:flex; align-items:center; justify-content:center;}
+  .book-cover .cover-ring::before{content:''; position:absolute; inset:4px; border-radius:50%; background:var(--wood-2);}
+  .book-cover .cover-ring span{position:relative; font-size:9px; font-weight:800; color:#f5ecd8;}
+  /* Book toolbar */
+  .book-toolbar{display:flex; align-items:center; gap:10px; margin:6px 2px 10px;}
+  .backbtn{font-size:11px; color:var(--muted); background:var(--surface); border:1px solid var(--border); padding:7px 12px; border-radius:9999px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-weight:600;}
+  .backbtn:hover{border-color:var(--cyan); color:var(--text);}
+  .book-title{font-family:'Fraunces',serif; font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .shelfscroll{overflow-x:auto; padding:8px 2px 10px; margin-bottom:4px; scrollbar-width:none;}
   .shelfscroll::-webkit-scrollbar{display:none;}
-  .shelf{display:flex; align-items:flex-end; gap:7px; padding-bottom:10px; border-bottom:3px solid var(--wood); position:relative;}
-  [data-theme="light"] .shelf{border-bottom-color:#c9b89a;}
-  .spine{flex:0 0 auto; width:38px; border-radius:4px 4px 2px 2px; cursor:pointer; position:relative; display:flex; align-items:flex-end; justify-content:center; padding-bottom:8px; box-shadow: inset -3px 0 6px rgba(0,0,0,.25), 0 3px 6px rgba(0,0,0,.25); transition:transform .18s, height .3s; transform-origin:bottom; min-height:44px;}
-  .spine:hover{transform:translateY(-6px) rotate(-1deg);} .spine.active{transform:translateY(-10px); box-shadow: inset -3px 0 6px rgba(0,0,0,.25), 0 6px 14px rgba(0,0,0,.35);}
-  .spine.active::after{content:''; position:absolute; top:-9px; left:50%; transform:translateX(-50%); width:5px; height:5px; border-radius:50%; background:var(--cyan);}
-  .spine .vlabel{writing-mode:vertical-rl; transform:rotate(180deg); font-size:10.5px; font-weight:700; color:rgba(255,255,255,.92); letter-spacing:.03em; text-shadow:0 1px 2px rgba(0,0,0,.3);}
-  .spine .fillcap{position:absolute; top:0; left:0; right:0; height:6px; border-radius:4px 4px 0 0; background:rgba(255,255,255,.5);}
+  .shelf{display:flex; gap:8px; padding:4px 2px 6px; overflow-x:auto; scrollbar-width:none; align-items:center; border-bottom:none;}
+  .shelf::-webkit-scrollbar{display:none;}
+  [data-theme="light"] .shelf{border-bottom-color:transparent;}
+  .spine{
+    flex:0 0 auto; padding:7px 14px; border-radius:9999px; border:1px solid var(--border); background:var(--surface); color:var(--muted);
+    font-size:0.8rem; font-weight:600; cursor:pointer; position:relative; display:inline-flex; align-items:center; gap:8px;
+    max-width:180px; white-space:nowrap; overflow:hidden; transition:all 0.15s; min-height:34px;
+  }
+  .spine.active{background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:#fff; border-color:transparent; box-shadow:0 4px 12px rgba(56,189,248,0.3);}
+  .spine:hover{border-color:var(--cyan); color:var(--text); transform:none;}
+  .spine.active:hover{transform:none;}
+  .spine.active::after{display:none;}
+  .spine .vlabel{writing-mode:horizontal-tb; transform:none; font-size:0.8rem; font-weight:600; color:inherit; letter-spacing:0; text-shadow:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:140px; display:inline-block;}
+  .spine .fillcap{position:absolute; left:10px; right:10px; bottom:3px; height:3px; border-radius:9999px; background:rgba(255,255,255,0.18); overflow:hidden;}
+  .spine.active .fillcap{background:rgba(255,255,255,0.35);}
+  .spine .fillcap::after{content:''; position:absolute; left:0; top:0; bottom:0; width:var(--fill-pct,0%); background:linear-gradient(90deg,#38bdf8,#818cf8); border-radius:9999px; transition:width 0.3s;}
+  .spine.active .fillcap::after{background:#fff;}
   .deckhead{display:flex; align-items:baseline; justify-content:space-between; margin:10px 2px 10px;}
   .deckhead .name{font-family:'Fraunces',serif; font-size:16.5px; font-weight:600;}
   .deckhead .hint{font-size:11px; color:var(--muted);}
-  .stack-area{position:relative; flex:1; min-height:360px; touch-action:none; display:flex; flex-direction:column;}
-  .card{position:absolute; inset:0; border-radius:12px; display:flex; flex-direction:column; box-shadow:0 18px 40px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.15); transition: transform .38s cubic-bezier(.2,0,0,1), opacity .32s, box-shadow .2s; perspective:1200px; min-height:340px;}
+  .stack-area{position:relative; flex:1; min-height:clamp(420px, 62dvh, 700px); height:clamp(420px, 62dvh, 700px); touch-action:none; display:flex; flex-direction:column;}
+  .card{position:absolute; inset:0; border-radius:12px; display:flex; flex-direction:column; box-shadow:0 18px 40px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.15); transition: transform .38s cubic-bezier(.2,0,0,1), opacity .32s, box-shadow .2s; perspective:1200px; min-height:0; height:100%;}
   .card.back2{transform:scale(.94) translateY(14px) rotate(-2deg); z-index:1; opacity:.7; box-shadow:0 8px 20px rgba(0,0,0,.2);}
   .card.back3{transform:scale(.88) translateY(26px) rotate(2deg); z-index:0; opacity:.4; box-shadow:none;}
   .card.top{z-index:3; cursor:grab;}
@@ -46,7 +84,9 @@
   .ribbon{position:absolute; top:0; right:22px; width:16px; height:34px; background:linear-gradient(180deg,#e24b4a,#b8322f); clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); box-shadow:0 2px 4px rgba(0,0,0,.2);}
   .cardhead{display:flex; justify-content:space-between; align-items:center; padding:18px 20px 6px 42px;}
   .tab{font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(0,0,0,.06); color:var(--card-ink); opacity:.75;}
-  .cardbody{padding:4px 22px 10px 42px; flex:1; overflow:hidden; display:flex; flex-direction:column; justify-content:center;}
+  .cardbody{padding:4px 22px 10px 42px; flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; justify-content:flex-start; min-height:0; scrollbar-width:thin; scrollbar-color: var(--border) transparent; -webkit-overflow-scrolling:touch;}
+  .cardbody::-webkit-scrollbar{width:4px}
+  .cardbody::-webkit-scrollbar-thumb{background:var(--border); border-radius:9999px}
   .cardbody h2{font-family:'Fraunces',serif; font-size:25px; font-weight:600; margin:6px 0 10px; letter-spacing:-0.01em; line-height:1.15;}
   .cardbody p{font-size:14.5px; line-height:1.6; opacity:.78; margin:0 0 14px;}
   .code{font-size:12px; padding:11px 13px; border-radius:8px; background:rgba(0,0,0,.85); color:#9ece6a; line-height:1.55; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); white-space:pre-wrap; word-break:break-word;}
@@ -70,6 +110,14 @@
   @keyframes pulseTray{0%{transform:scale(1)}40%{transform:scale(1.1)}100%{transform:scale(1)}}
   .dragtip{text-align:center; font-size:11.5px; color:var(--muted); margin-top:12px; display:flex; align-items:center; justify-content:center; gap:6px;}
   .empty{padding:40px 20px; text-align:center; color:var(--muted); background:var(--surface); border-radius:12px; border:1px dashed var(--border); margin-top:20px;}
+  .stack-area .empty{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+    min-height:0; height:100%; margin-top:0; border-radius:12px; animation:none;
+  }
+  .stack-area .empty .empty-icon{font-size:2.2rem; opacity:0.9;}
+  #replayBtn{display:none; margin-top:10px; padding:10px 16px; border-radius:9999px; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:700; font-size:12px; border:none; cursor:pointer; box-shadow:0 4px 12px rgba(56,189,248,0.3);}
+  #replayBtn.show{display:inline-block;}
+  #uploadLink{margin-top:10px; padding:8px 14px; border-radius:9999px; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:600; font-size:12px; text-decoration:none; display:inline-block;}
 </style>
 </head>
 <body data-theme="dark">
@@ -80,58 +128,66 @@
       <div class="tagline">a card catalog, not a feed</div>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
+      <a class="cablink" href="/upload">Upload PDF</a>
       <a class="cablink" href="/cabinet">My Cabinet →</a>
       <button class="themebtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
     </div>
   </div>
-  <div class="shelfscroll"><div class="shelf" id="shelfrow"></div></div>
-  <div class="deckhead"><span class="name" id="shelfName">Loading…</span><span class="hint">drag or tap trays</span></div>
-  <div class="stack-area" id="stackArea">
-    <div class="card back3" id="back3"></div>
-    <div class="card back2" id="back2"></div>
-    <div class="card top" id="topCard">
-      <div class="zonehint" id="zoneReview" style="background:color-mix(in srgb, var(--amber) 30%, transparent); color:#7a5200;">Review</div>
-      <div class="zonehint" id="zoneCatalog" style="background:color-mix(in srgb, var(--cyan) 30%, transparent); color:#00506b;">Catalog</div>
-      <div class="zonehint" id="zoneMastered" style="background:color-mix(in srgb, var(--green) 30%, transparent); color:#0a5c3d;">Got it</div>
-      <div class="flipinner" id="flipInner">
-        <div class="face front" id="faceFront"></div>
-        <div class="face back" id="faceBack"></div>
+
+  <!-- Library Home -->
+  <div id="libraryView">
+    <div class="library-head"><span class="title">My Library</span><span class="count" id="libraryCount">—</span></div>
+    <div id="bookRow" class="book-row"></div>
+    <div id="libraryEmpty" class="empty" style="display:none">
+      <div class="empty-icon">📚</div>
+      <div style="font-weight:600; color:var(--text);">No books yet</div>
+      <div style="font-size:12.5px; max-width:260px;">Upload a syllabus — each PDF becomes a Book, each module a Shelf inside.</div>
+      <a href="/upload" style="margin-top:10px; padding:8px 14px; border-radius:9999px; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:600; font-size:12px; text-decoration:none; display:inline-block;">📄 Upload Syllabus</a>
+    </div>
+  </div>
+
+  <!-- Inside a Book -->
+  <div id="bookView" style="display:none">
+    <div class="book-toolbar">
+      <button class="backbtn" onclick="showLibrary()">← Library</button>
+      <span class="book-title" id="bookTitle">—</span>
+    </div>
+    <div class="shelfscroll"><div class="shelf" id="shelfrow"></div></div>
+    <div class="deckhead"><span class="name" id="shelfName">Loading…</span><span class="hint">drag or tap trays</span></div>
+    <div class="stack-area" id="stackArea">
+      <div id="emptyMsg" class="empty" style="display:none">
+        <div class="empty-icon">📚</div>
+        <div style="font-weight:600; color:var(--text);">No cards here</div>
+        <div class="empty-text" style="font-size:12.5px; max-width:260px;">No cards in this shelf — upload a syllabus and render.</div>
+        <a id="uploadLink" href="/upload" style="display:inline-block;">📄 Upload Syllabus</a>
+        <button id="replayBtn" onclick="enterReplay()">See it again ↻</button>
+      </div>
+      <div class="card back3" id="back3"></div>
+      <div class="card back2" id="back2"></div>
+      <div class="card top" id="topCard">
+        <div class="zonehint" id="zoneReview" style="background:color-mix(in srgb, var(--amber) 30%, transparent); color:#7a5200;">Review</div>
+        <div class="zonehint" id="zoneCatalog" style="background:color-mix(in srgb, var(--cyan) 30%, transparent); color:#00506b;">Catalog</div>
+        <div class="zonehint" id="zoneMastered" style="background:color-mix(in srgb, var(--green) 30%, transparent); color:#0a5c3d;">Got it</div>
+        <div class="zonehint" id="zoneReplay" style="background:color-mix(in srgb, var(--indigo) 30%, transparent); color:#2a1a6a;">Replay ↑</div>
+        <div class="flipinner" id="flipInner">
+          <div class="face front" id="faceFront"></div>
+          <div class="face back" id="faceBack"></div>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="trays">
-    <div class="tray" id="trayReview" onclick="file('review')"><span class="icon">↺</span><span class="lbl">Review</span></div>
-    <div class="tray" id="trayCatalog" onclick="file('catalog')"><span class="icon">⊙</span><span class="lbl">Catalog</span></div>
-    <div class="tray" id="trayMastered" onclick="file('mastered')"><span class="icon">✓</span><span class="lbl">Got it</span></div>
-  </div>
-  <div class="dragtip" id="dragTip">try dragging the card toward a tray</div>
-  <div id="emptyMsg" class="empty" style="display:none">No cards in this shelf — upload a syllabus and render.</div>
-  <div id="accountBadge" style="text-align:center; font-size:11px; color:var(--muted); margin-top:10px;">Browsing as <span id="accountName">anon</span> · <a href="#" onclick="showOnboarding(true); return false;" style="color:var(--cyan)">Save shelf?</a></div>
-</div>
-<div id="onboardingSheet" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); backdrop-filter:blur(4px); z-index:100; align-items:end; justify-content:center; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom));">
-  <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px; width:100%; max-width:400px; box-shadow:0 20px 40px rgba(0,0,0,.4);">
-    <h3 style="font-family:'Fraunces',serif; margin:0 0 6px;">Save your shelf?</h3>
-    <p style="font-size:12.5px; color:var(--muted); margin:0 0 14px;">Enter name, college, mail — takes 10s. No password. Keeps your Got it progress forever.</p>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <input id="onName" placeholder="Your name" style="padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px;">
-      <select id="onCollege" style="padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px;">
-        <option value="">Select college</option>
-        <option value="vtu_belgaum">VTU Belgaum</option>
-        <option value="bmsce">BMSCE</option>
-        <option value="rvce">RVCE</option>
-        <option value="pes_university">PES University</option>
-        <option value="msrit">MSRIT</option>
-        <option value="dsce">DSCE</option>
-        <option value="other">Other</option>
-      </select>
-      <input id="onEmail" type="email" placeholder="Mail id" style="padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px;">
+    <div class="trays">
+      <div class="tray" id="trayReview" onclick="file('review')"><span class="icon">↺</span><span class="lbl">Review</span></div>
+      <div class="tray" id="trayCatalog" onclick="file('catalog')"><span class="icon">⊙</span><span class="lbl">Catalog</span></div>
+      <div class="tray" id="trayMastered" onclick="file('mastered')"><span class="icon">✓</span><span class="lbl">Got it</span></div>
     </div>
-    <div style="display:flex; gap:10px; margin-top:16px;">
-      <button onclick="dismissOnboarding()" style="flex:1; padding:12px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--muted); font-weight:600; cursor:pointer; min-height:44px;">Continue as anon</button>
-      <button onclick="submitOnboarding()" style="flex:1; padding:12px; border-radius:12px; border:none; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:700; cursor:pointer; min-height:44px;">Save shelf</button>
-    </div>
-    <p id="onError" style="font-size:11px; color:#f87171; margin-top:8px; display:none;"></p>
+    <div class="dragtip" id="dragTip">try dragging the card toward a tray</div>
   </div>
+
+   <div id="accountBadge" style="text-align:center; font-size:11px; color:var(--muted); margin-top:12px; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;">
+     <span>Signed in as <strong id="accountName" style="color:var(--text)">—</strong> <span id="accountCollege" style="opacity:0.7"></span></span>
+     <span style="opacity:0.35">·</span>
+     <a href="#" onclick="handleLogout(); return false;" style="color:var(--cyan); text-decoration:none; font-weight:600; border:1px solid var(--border); padding:4px 10px; border-radius:9999px; background:var(--surface);">Log out</a>
+   </div>
 </div>
 <script src="/static/deck.js"></script>
 <script>

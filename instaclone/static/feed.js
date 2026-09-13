@@ -1,4 +1,5 @@
-// StudyReel InstaClone Feed Controller — global trending, tag filter, diff, swipe
+// StudyReel Feed Controller — global trending, tag filter, diff, swipe
+try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
 const postStates = {}; // { [postId]: { currentSlide: number, liked: boolean, viewed: boolean } }
 let currentTag = "all";
 let currentSort = "trending";

@@ -35,10 +35,64 @@ class _LangView:
         self.value = name
 
 
+def _diagram_svg(nodes: list[str], edges: list[list[str]]) -> str:
+    """Simple vertical/flow diagram SVG — no external graph library, stacked layout."""
+    if not nodes:
+        return ""
+    # map node name -> index
+    idx = {n: i for i, n in enumerate(nodes)}
+    # layout: single column vertical, centered
+    box_w, box_h = 360, 56
+    gap_y = 28
+    start_y = 30
+    cx = 400  # SVG center x (800 width)
+    parts = []
+    parts.append('<svg width="800" height="{}" viewBox="0 0 800 {}" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto;">'.format(
+        len(nodes)*(box_h+gap_y)+60, len(nodes)*(box_h+gap_y)+60))
+    parts.append('<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8"/></marker></defs>')
+    # edges first (behind boxes)
+    for src, dst in edges:
+        if src not in idx or dst not in idx:
+            continue
+        si, di = idx[src], idx[dst]
+        y1 = start_y + si*(box_h+gap_y) + box_h
+        y2 = start_y + di*(box_h+gap_y)
+        # vertical line with slight curve if not adjacent?
+        x1, x2 = cx, cx
+        # if same level or branching, offset x slightly to avoid overlap
+        if abs(si-di) > 1:
+            # diagonal
+            x2 = cx + (10 if di%2==0 else -10)
+        parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#arr)" opacity="0.95"/>')
+    # nodes
+    for i, n in enumerate(nodes):
+        y = start_y + i*(box_h+gap_y)
+        x = cx - box_w//2
+        safe = n.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")[:28]
+        parts.append(f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="12" fill="#0f1729" stroke="#1e2d4a" stroke-width="1.5"/>')
+        parts.append(f'<rect x="{x}" y="{y}" width="4" height="{box_h}" rx="2" fill="#38bdf8" opacity="0.9"/>')
+        parts.append(f'<text x="{cx}" y="{y+34}" text-anchor="middle" font-family="Inter, sans-serif" font-size="15" font-weight="600" fill="#eef2f8">{safe}</text>')
+    parts.append('</svg>')
+    return "\n".join(parts)
+
+
 def build_slide_view(slide: Slide, carousel: Carousel, index: int) -> dict:
     """Map a canonical Slide/MicroTopic onto the template view."""
     topic = slide.topic
     lang = topic.language_tag or "python"
+    diagram = None
+    diagram_svg = None
+    if getattr(topic, "diagram", None):
+        d = topic.diagram
+        # d may be Diagram model or dict
+        nodes = getattr(d, "nodes", None) or (d.get("nodes") if isinstance(d, dict) else [])
+        edges = getattr(d, "edges", None) or (d.get("edges") if isinstance(d, dict) else [])
+        if nodes:
+            diagram = {"nodes": nodes, "edges": edges}
+            try:
+                diagram_svg = _diagram_svg(nodes, edges or [])
+            except Exception:
+                diagram_svg = None
     return {
         "slide": {
             "slide_type": slide.slide_type,
@@ -49,6 +103,8 @@ def build_slide_view(slide: Slide, carousel: Carousel, index: int) -> dict:
             "language": _LangView(lang),
             "slide_number": index + 1,
             "total_slides": len(carousel.slides),
+            "diagram": diagram,
+            "diagram_svg": diagram_svg,
         },
         "topic": {
             "title": topic.header,

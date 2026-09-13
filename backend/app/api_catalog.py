@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
 
-from app.db.database import get_carousel, get_shelf_summary, list_card_states, upsert_card_state
+from app.db.database import get_carousel, get_library_summary, get_shelf_summary, list_card_states, upsert_card_state
 from app.schemas import FileCardRequest
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
@@ -21,9 +21,36 @@ def _uid(x_user_id: Optional[str] = Query(None), x_user_id_h: Optional[str] = He
 def get_shelves(
     user_id: str = Header(None, alias="X-User-Id"),
     user_id_q: Optional[str] = Query(None, alias="user_id"),
+    syllabus_id: Optional[str] = Query(None, description="filter to one book/syllabus"),
 ) -> list[dict]:
     uid = (user_id or user_id_q or "anon").strip() or "anon"
-    return get_shelf_summary(uid)
+    shelves = get_shelf_summary(uid)
+    if syllabus_id is not None:
+        try:
+            sid = int(syllabus_id)
+            shelves = [s for s in shelves if s.get("syllabus_id") == sid]
+        except:
+            # allow string book_id filtering
+            shelves = [s for s in shelves if str(s.get("syllabus_id")) == str(syllabus_id) or str(s.get("book_label")) == str(syllabus_id)]
+    return shelves
+
+
+@router.get("/books")
+def get_books(
+    user_id: str = Header(None, alias="X-User-Id"),
+    user_id_q: Optional[str] = Query(None, alias="user_id"),
+) -> list[dict]:
+    uid = (user_id or user_id_q or "anon").strip() or "anon"
+    return get_library_summary(uid)
+
+
+@router.get("/library")
+def get_library(
+    user_id: str = Header(None, alias="X-User-Id"),
+    user_id_q: Optional[str] = Query(None, alias="user_id"),
+) -> list[dict]:
+    uid = (user_id or user_id_q or "anon").strip() or "anon"
+    return get_library_summary(uid)
 
 
 @router.get("/deck")
@@ -31,8 +58,11 @@ def get_deck(
     shelf: str = Query(..., description="shelf_id (carousel id) or label"),
     user_id: str = Header(None, alias="X-User-Id"),
     user_id_q: Optional[str] = Query(None, alias="user_id"),
+    replay: bool = Query(False, description="if true, return all cards ignoring filed status"),
+    all: bool = Query(False, alias="all", description="alias for replay"),
 ) -> dict:
     uid = (user_id or user_id_q or "anon").strip() or "anon"
+    do_replay = replay or all
     shelves = get_shelf_summary(uid)
     # find shelf by shelf_id or label
     target = None
@@ -41,13 +71,23 @@ def get_deck(
             target = s
             break
     if not target:
-        # try direct carousel id numeric
+        # try direct carousel id numeric — still enforce ownership
         try:
             cid = int(shelf)
             rec = get_carousel(cid)
             if rec:
-                data = rec["carousel"]
-                target = {"shelf_id": str(cid), "label": data.get("module_name","")[:12], "module_name": data.get("module_name",""), "carousel_id": cid, "total_slides": len(data.get("slides",[])), "mastered_count": 0, "fill_pct": 0}
+                from app.db.database import _connect
+                owned = False
+                with _connect() as conn:
+                    prow = conn.execute(
+                        "SELECT s.owner_user_id FROM carousels c JOIN modules m ON m.id=c.module_id JOIN syllabi s ON s.id=m.syllabus_id WHERE c.id=?",
+                        (cid,),
+                    ).fetchone()
+                    if prow and prow["owner_user_id"] == uid:
+                        owned = True
+                if owned:
+                    data = rec["carousel"]
+                    target = {"shelf_id": str(cid), "label": data.get("module_name","")[:12], "module_name": data.get("module_name",""), "carousel_id": cid, "total_slides": len(data.get("slides",[])), "mastered_count": 0, "fill_pct": 0}
         except Exception:
             pass
     if not target or target.get("carousel_id") is None:
@@ -60,41 +100,71 @@ def get_deck(
     slides = carousel.get("slides", [])
     states = list_card_states(uid)
     status_map = {r["card_key"]: r["status"] for r in states}
-    # Build deck: unfiled first, then review resurface
-    unfiled = []
-    review = []
-    for idx, sl in enumerate(slides):
-        key = f"{cid}:{idx}"
-        st = status_map.get(key, "unfiled")
-        topic = sl.get("topic", {})
-        card = {
-            "card_key": key,
-            "post_id": str(cid),
-            "slide_index": idx,
-            "status": st,
-            "front": {
-                "header": topic.get("header",""),
-                "body": topic.get("body",""),
-                "code": topic.get("code_block"),
-                "language": topic.get("language_tag") or "python",
-                "slide_number": idx+1,
-                "total_slides": len(slides),
-            },
-            "back": {
-                "back_header": topic.get("back_header") or "Why it matters",
-                "back_body": topic.get("back_body") or "Exam focus: practice this concept with a diagram or formula.",
+    if do_replay:
+        # Replay: ignore filed status, show all cards in order
+        deck_cards = []
+        for idx, sl in enumerate(slides):
+            key = f"{cid}:{idx}"
+            st = status_map.get(key, "unfiled")
+            topic = sl.get("topic", {})
+            card = {
+                "card_key": key,
+                "post_id": str(cid),
+                "slide_index": idx,
+                "status": st,
+                "front": {
+                    "header": topic.get("header",""),
+                    "body": topic.get("body",""),
+                    "code": topic.get("code_block"),
+                    "language": topic.get("language_tag") or "python",
+                    "slide_number": idx+1,
+                    "total_slides": len(slides),
+                    "diagram": topic.get("diagram"),
+                },
+                "back": {
+                    "back_header": topic.get("back_header") or "Why it matters",
+                    "back_body": topic.get("back_body") or "Exam focus: practice this concept with a diagram or formula.",
+                    "exam_weight": topic.get("exam_weight") or "medium",
+                },
                 "exam_weight": topic.get("exam_weight") or "medium",
-            },
-            "exam_weight": topic.get("exam_weight") or "medium",
-        }
-        if st == "unfiled":
-            unfiled.append(card)
-        elif st == "review":
-            review.append(card)
-        elif st in ("catalog","mastered"):
-            continue
-    # review resurfaces after unfiled exhausted (simple re-injection)
-    deck_cards = unfiled + review
+            }
+            deck_cards.append(card)
+    else:
+        # Normal: unfiled first, then review
+        unfiled = []
+        review = []
+        for idx, sl in enumerate(slides):
+            key = f"{cid}:{idx}"
+            st = status_map.get(key, "unfiled")
+            topic = sl.get("topic", {})
+            card = {
+                "card_key": key,
+                "post_id": str(cid),
+                "slide_index": idx,
+                "status": st,
+                "front": {
+                    "header": topic.get("header",""),
+                    "body": topic.get("body",""),
+                    "code": topic.get("code_block"),
+                    "language": topic.get("language_tag") or "python",
+                    "slide_number": idx+1,
+                    "total_slides": len(slides),
+                    "diagram": topic.get("diagram"),
+                },
+                "back": {
+                    "back_header": topic.get("back_header") or "Why it matters",
+                    "back_body": topic.get("back_body") or "Exam focus: practice this concept with a diagram or formula.",
+                    "exam_weight": topic.get("exam_weight") or "medium",
+                },
+                "exam_weight": topic.get("exam_weight") or "medium",
+            }
+            if st == "unfiled":
+                unfiled.append(card)
+            elif st == "review":
+                review.append(card)
+            elif st in ("catalog","mastered"):
+                continue
+        deck_cards = unfiled + review
     return {
         "shelf_id": target["shelf_id"],
         "shelf_label": target["label"],

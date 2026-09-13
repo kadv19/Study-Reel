@@ -18,8 +18,8 @@
     <div class="glass-card-glow rounded-2xl p-10 relative overflow-hidden">
       <div class="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-cyan-400 via-indigo-500 to-emerald-400"></div>
       
-      <!-- Belt-and-braces: wrapped at ~28 chars/line equivalent width, with line-clamp-6 and safe overflow handling -->
-      <p class="text-2xl sm:text-3xl text-slate-100 font-medium leading-relaxed max-w-[760px] break-word-safe line-clamp-6">
+      <!-- Auto-scale font for longer bodies to avoid clipping on 1080x1350 -->
+      <p class="{% if slide.body|length > 110 %}text-xl{% else %}text-2xl sm:text-3xl{% endif %} text-slate-100 font-medium leading-relaxed max-w-[760px] break-word-safe {% if slide.body|length > 130 %}line-clamp-8{% else %}line-clamp-6{% endif %}">
         {{ slide.body }}
       </p>
 

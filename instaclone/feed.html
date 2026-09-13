@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>StudyReel Feed • InstaClone</title>
+  <title>StudyReel — Feed</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
+  <script>try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}</script>
 </head>
 <body>
   <header class="app-header">
@@ -16,9 +17,13 @@
       <span>StudyReel</span>
       <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted);margin-left:8px;">learn to scroll</span>
     </div>
-    <div class="live-badge">
-      <span class="live-dot"></span>
-      <span>Live Feed</span>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <div class="live-badge">
+        <span class="live-dot"></span>
+        <span>Live Feed</span>
+      </div>
+      <a href="/deck" style="font-size:11px; color:var(--text-muted); text-decoration:none; border:1px solid var(--border-color); padding:6px 10px; border-radius:9999px; background:var(--bg-surface);">Deck →</a>
+      <a href="#" onclick="localStorage.removeItem('sr_session_token'); localStorage.removeItem('sr_user_real_id'); location.href='/auth'; return false;" style="font-size:11px; color:var(--text-muted); text-decoration:none; border:1px solid var(--border-color); padding:6px 10px; border-radius:9999px; background:var(--bg-surface);">Log out</a>
     </div>
   </header>
   <nav class="filter-bar" id="filter-bar">
@@ -36,7 +41,7 @@
     <div class="empty-state">
       <div class="empty-icon">&#128247;</div>
       <h3>Loading Feed...</h3>
-      <p style="color:var(--text-muted); margin-top:8px;">Connecting to InstaClone API on port 8100...</p>
+      <p style="color:var(--text-muted); margin-top:8px;">Connecting to StudyReel API on port 8100...</p>
     </div>
   </main>
 

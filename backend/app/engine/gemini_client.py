@@ -59,12 +59,41 @@ Rules:
 - No preamble, no explanation, no markdown fence — output ONLY valid JSON.
 """
 
-CACHE_SCHEMA_VERSION = "v3"
+CACHE_SCHEMA_VERSION = "v4"
 
 
 def _hash(text: str) -> str:
     cache_input = f"{CACHE_SCHEMA_VERSION}:{text}"
     return hashlib.md5(cache_input.encode()).hexdigest()
+
+
+def _build_system_prompt(depth_format: str = "detailed", tone: str = "default", slide_count: int = 10, has_resource: bool = False) -> str:
+    base = SYSTEM_PROMPT
+    extras = []
+    # slide count guidance
+    extras.append(f"Generate approximately {slide_count} micro-topics (target {slide_count}, acceptable {max(1, slide_count-1)}-{slide_count+1}). Do not hard-truncate if you return slightly more/fewer, but aim for {slide_count}.")
+    # depth/format
+    if depth_format == "detailed":
+        extras.append("Depth: detailed — full explanations, weave in provided resource notes when present, use complete sentences, keep body up to 140 chars but be thorough.")
+        if has_resource:
+            extras.append("Weave resource_text content into explanations when relevant — prioritize resource facts.")
+    elif depth_format == "short":
+        extras.append("Depth: short & crisp — even more concise than default, bodies ~60-90 chars, no filler, bullet-like but still a sentence.")
+    elif depth_format == "diagram":
+        extras.append("Format: diagram only — for each topic, instead of a prose body, output a structured `diagram` field: {\"nodes\": [\"...\"], \"edges\": [[\"A\",\"B\"], ...]} with max 6 nodes, describing a simple block diagram for that concept. Keep body very short (e.g. \"See diagram\" ≤ 40 chars) and include diagram. Body still required but minimal. Diagram should be self-contained per slide.")
+    elif depth_format == "both":
+        extras.append("Format: both — normal body text (max 140) PLUS a `diagram` field per topic: {\"nodes\": [...], \"edges\": [[...]]} max 6 nodes. Provide both prose and diagram.")
+    # tone
+    if tone == "eli5":
+        extras.append("Tone: ELI5 — simple language, analogies, no jargon, explain like I'm 5 years old, friendly.")
+    elif tone == "professional":
+        extras.append("Tone: professional exam-ready — precise terminology, formal, VTU exam style, concise definitions.")
+    else:
+        extras.append("Tone: default — balanced, clear, exam-focused as in base rules.")
+    # diagram field spec for all when needed
+    if depth_format in ("diagram", "both"):
+        extras.append("Diagram spec: nodes are short labels (≤ 20 chars each), edges are [source, target] string pairs where both names exactly match nodes. Keep to ≤6 nodes and ≤8 edges per diagram, simple vertical/grid flow.")
+    return base + "\n\nAdditional instructions:\n- " + "\n- ".join(extras)
 
 
 class GeminiClient:
@@ -96,17 +125,27 @@ class GeminiClient:
             json.dump(payload, fh)
 
     def generate_topics(self, module_text: str, max_retries: int = 2,
-                        repair_attempts: int = 1) -> list[MicroTopic]:
+                        repair_attempts: int = 1,
+                        depth_format: str = "detailed", tone: str = "default",
+                        slide_count: int = 10, resource_text: Optional[str] = None) -> list[MicroTopic]:
         """module_text -> validated MicroTopic list. Cache-aware, retry + repair-tolerant."""
-        cache_key = _hash(module_text)
+        # include tailoring params in cache key so different options don't collide
+        cache_src = f"{module_text}|{depth_format}|{tone}|{slide_count}|{(resource_text or '')[:800]}"
+        cache_key = _hash(cache_src)
         cached = self._from_cache(cache_key)
         if cached is not None:
             return TypeAdapter(list[MicroTopic]).validate_python(cached)
 
+        system_prompt = _build_system_prompt(depth_format, tone, slide_count, bool(resource_text))
+        # build contents with optional resource
+        effective_text = module_text
+        if resource_text and depth_format in ("detailed", "both"):
+            effective_text = f"{module_text}\n\nAdditional resource notes (weave into explanations when relevant):\n{resource_text[:6000]}"
+
         last_exc: Exception | None = None
         for attempt in range(max_retries + 1):
             try:
-                raw = self._generate(module_text, last_error=None)
+                raw = self._generate(effective_text, last_error=None, system_prompt=system_prompt)
                 topics = TypeAdapter(list[MicroTopic]).validate_python(raw)
                 self._to_cache(cache_key, [t.model_dump() for t in topics])
                 return topics
@@ -121,7 +160,7 @@ class GeminiClient:
                 ):
                     for _ in range(repair_attempts):
                         try:
-                            raw = self._generate(module_text, last_error=str(exc))
+                            raw = self._generate(effective_text, last_error=str(exc), system_prompt=system_prompt)
                             topics = TypeAdapter(list[MicroTopic]).validate_python(raw)
                             self._to_cache(cache_key, [t.model_dump() for t in topics])
                             return topics
@@ -129,7 +168,7 @@ class GeminiClient:
                             last_exc = exc2
         raise RuntimeError(f"Gemini generation failed after retries+repairs: {last_exc}")
 
-    def _generate(self, module_text: str, last_error: Optional[str]) -> list[dict]:
+    def _generate(self, module_text: str, last_error: Optional[str], system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
         """One raw Gemini call; returns the parsed JSON payload. Fails over
         across MODEL_FAILOVER models when the active model is quota-exhausted."""
         contents = module_text
@@ -149,7 +188,7 @@ class GeminiClient:
                     model=model,
                     contents=contents,
                     config={
-                        "system_instruction": SYSTEM_PROMPT,
+                        "system_instruction": system_prompt,
                         "temperature": 0.4,
                         "response_mime_type": "application/json",
                     },
@@ -160,9 +199,9 @@ class GeminiClient:
                 last_exc = exc
                 if "429" not in str(exc) and "RESOURCE_EXHAUSTED" not in str(exc):
                     raise  # non-quota errors are not failover-worthy
-        return self._generate_ollama(contents)
+        return self._generate_ollama(contents, system_prompt)
 
-    def _generate_ollama(self, contents: str) -> list[dict]:
+    def _generate_ollama(self, contents: str, system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
         """Fallback to a local Ollama model when Gemini quota is exhausted."""
         try:
             import requests
@@ -171,12 +210,15 @@ class GeminiClient:
                 "All Gemini models quota-exhausted and `requests` unavailable for Ollama fallback"
             ) from exc
 
+        # include diagram in Ollama schema when prompt asks for it
+        has_diagram = "diagram" in system_prompt.lower()
+        diagram_keys = ", diagram (object with nodes:[string] and edges:[[string,string]] or null)" if has_diagram else ""
         user_prompt = (
             f"{contents}\n\n"
             f"Respond with ONLY a JSON object of the form {{\"topics\": [ ... ] }}. "
             f"Each element of the array must have exactly these keys: header "
             f"(string, max 30 chars), body (string, max 140 chars), code_block "
-            f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null)."
+            f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null){diagram_keys}."
         )
 
         try:
@@ -185,7 +227,7 @@ class GeminiClient:
                 json={
                     "model": OLLAMA_MODEL,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
                     "stream": False,
@@ -204,6 +246,10 @@ class GeminiClient:
             ) from exc
 
 
-def generate_topics_for_module(module_text: str, api_key: Optional[str] = None) -> list[MicroTopic]:
+def generate_topics_for_module(module_text: str, api_key: Optional[str] = None,
+                             depth_format: str = "detailed", tone: str = "default",
+                             slide_count: int = 10, resource_text: Optional[str] = None) -> list[MicroTopic]:
     """Module-level entrypoint used by the pipeline."""
-    return GeminiClient(api_key=api_key).generate_topics(module_text)
+    return GeminiClient(api_key=api_key).generate_topics(
+        module_text, depth_format=depth_format, tone=tone, slide_count=slide_count, resource_text=resource_text
+    )

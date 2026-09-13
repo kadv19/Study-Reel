@@ -5,9 +5,9 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -16,12 +16,14 @@ from app.db.database import (
     get_carousel,
     get_module,
     get_pipeline_state,
+    get_resource_text_for_syllabus,
     init_db,
     save_carousel,
     save_syllabus,
     set_pipeline_state,
 )
 from app.engine.gemini_client import generate_topics_for_module
+from app.ingestion.parser import extract_text
 from app.ingestion.pipeline import process_pdf
 from app.renderer.render import render_carousel
 from app.schemas import Carousel, MicroTopic, Slide, Syllabus
@@ -52,7 +54,15 @@ class CarouselRenderRequest(BaseModel):
 
     module_name: str = Field(..., max_length=60)
     subject_code: Optional[str] = Field(None, max_length=20)
-    topics: list[MicroTopic] = Field(..., min_length=1, max_length=10)
+    topics: list[MicroTopic] = Field(..., min_length=1, max_length=20)
+
+
+class TopicsGenerateRequest(BaseModel):
+    """Tailoring options for topic generation — dropdown-driven upload flow."""
+
+    depth_format: Literal["detailed", "short", "diagram", "both"] = "detailed"
+    tone: Literal["eli5", "professional", "default"] = "default"
+    slide_count: int = Field(10, ge=3, le=20)
 
 
 @app.on_event("startup")
@@ -72,8 +82,15 @@ def status() -> dict:
 
 
 @app.post("/api/v1/syllabus/upload", response_model=Syllabus)
-async def upload_syllabus(file: UploadFile = File(...)) -> Syllabus:
-    """Upload a syllabus PDF, run ingestion, persist, return typed modules."""
+async def upload_syllabus(
+    file: UploadFile = File(...),
+    resource_file: UploadFile | None = File(default=None),
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> Syllabus:
+    """Upload a syllabus PDF, optionally a resource PDF, run ingestion, persist, return typed modules. Requires X-User-Id."""
+    if not x_user_id or not x_user_id.strip():
+        raise HTTPException(status_code=401, detail="X-User-Id header required")
+    owner = x_user_id.strip()
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
@@ -82,6 +99,22 @@ async def upload_syllabus(file: UploadFile = File(...)) -> Syllabus:
     dest = UPLOAD_DIR / f"{uuid.uuid4().hex}_{file.filename}"
     dest.write_bytes(await file.read())
 
+    resource_text: str | None = None
+    if resource_file and resource_file.filename:
+        if not resource_file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Resource file must be a PDF")
+        rdest = UPLOAD_DIR / f"{uuid.uuid4().hex}_{resource_file.filename}"
+        rdest.write_bytes(await resource_file.read())
+        try:
+            resource_text = extract_text(rdest)
+            # cap to avoid huge prompt
+            if len(resource_text) > 8000:
+                resource_text = resource_text[:8000]
+        except Exception as exc:
+            # non-fatal: keep resource_text None but log
+            resource_text = None
+            set_pipeline_state("PROCESSING", "ingestion", 0.15, f"Resource parse warning: {exc}")
+
     try:
         syllabus = process_pdf(dest)
         syllabus.file_name = file.filename  # return the original name, not the stored one
@@ -89,7 +122,7 @@ async def upload_syllabus(file: UploadFile = File(...)) -> Syllabus:
         set_pipeline_state("FAILED", "ingestion", 0.0, str(exc))
         raise HTTPException(status_code=422, detail=f"Ingestion failed: {exc}") from exc
 
-    syllabus_id = save_syllabus(syllabus)
+    syllabus_id = save_syllabus(syllabus, owner_user_id=owner, resource_text=resource_text)
     set_pipeline_state("DONE", "ingestion", 1.0, f"Extracted {len(syllabus.modules)} modules (id={syllabus_id})")
 
     return syllabus
@@ -125,12 +158,63 @@ def generate_module_topics(module_number: int) -> list[MicroTopic]:
     return topics
 
 
+@app.post("/api/v1/modules/{module_number}/topics", response_model=list[MicroTopic])
+def generate_module_topics_post(
+    module_number: int,
+    req: TopicsGenerateRequest,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> list[MicroTopic]:
+    """POST variant with tailoring options — dropdown-driven flow.
+
+    Takes depth_format, tone, slide_count and optional resource_text linked to the syllabus.
+    Keeps GET for backward compatibility.
+    """
+    record = get_module(module_number)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Module {module_number} not found — upload a syllabus first")
+
+    module = record["module"]
+    module_text = "\n".join(module["topic_strings"])
+    title = module.get("module_title") or f"Module {module_number}"
+    # resource_text is stored per syllabus; get_module now returns it
+    resource_text = record.get("resource_text")
+
+    set_pipeline_state("PROCESSING", "generation", 0.2, f"Generating topics for {title} [{req.depth_format}/{req.tone} ×{req.slide_count}]")
+
+    try:
+        topics = generate_topics_for_module(
+            module_text,
+            depth_format=req.depth_format,
+            tone=req.tone,
+            slide_count=req.slide_count,
+            resource_text=resource_text,
+        )
+    except Exception as exc:
+        set_pipeline_state("FAILED", "generation", 0.0, f"Generation failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Generation failed: {exc}") from exc
+
+    set_pipeline_state(
+        "DONE", "generation", 1.0,
+        f"Generated {len(topics)} topics for {title}",
+    )
+    return topics
+
+
 @app.post("/api/v1/carousels/render")
-def render_approved_carousel(req: CarouselRenderRequest) -> dict:
+def render_approved_carousel(
+    req: CarouselRenderRequest,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> dict:
     """Render approved MicroTopics into 1080x1350 PNG slides (Playwright)."""
     slides = []
     for i, topic in enumerate(req.topics):
-        slide_type = "mixed" if topic.code_block else "text"
+        has_diagram = bool(getattr(topic, "diagram", None))
+        if has_diagram:
+            slide_type = "diagram"
+        elif topic.code_block:
+            slide_type = "mixed"
+        else:
+            slide_type = "text"
         slides.append(Slide(slide_type=slide_type, index=i, topic=topic))
 
     carousel = Carousel(
@@ -149,7 +233,8 @@ def render_approved_carousel(req: CarouselRenderRequest) -> dict:
         set_pipeline_state("FAILED", "rendering", 0.0, f"Rendering failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Rendering failed: {exc}") from exc
 
-    module_id = _latest_module_id()
+    owner = x_user_id.strip() if x_user_id and x_user_id.strip() else None
+    module_id = _latest_module_id(owner_user_id=owner)
     carousel_db_id = save_carousel(carousel, module_id, output_dir=str(out_dir))
     set_pipeline_state(
         "DONE", "rendering", 1.0,
@@ -194,10 +279,17 @@ def export_carousel(carousel_id: int) -> StreamingResponse:
     )
 
 
-def _latest_module_id() -> int:
-    """Resolve a module_id for carousel FK (latest syllabus's first module)."""
+def _latest_module_id(owner_user_id: str | None = None) -> int:
+    """Resolve a module_id for carousel FK (latest syllabus's first module, owner-scoped if given)."""
     from app.db.database import _connect
 
     with _connect() as conn:
+        if owner_user_id:
+            row = conn.execute(
+                "SELECT m.id FROM modules m JOIN syllabi s ON s.id=m.syllabus_id WHERE s.owner_user_id=? ORDER BY m.id DESC LIMIT 1",
+                (owner_user_id,),
+            ).fetchone()
+            if row:
+                return row["id"]
         row = conn.execute("SELECT id FROM modules ORDER BY id DESC LIMIT 1").fetchone()
     return row["id"] if row else 1
