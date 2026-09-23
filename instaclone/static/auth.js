@@ -135,7 +135,8 @@ async function handleSignup(e){
       try{ const j=JSON.parse(msg); msg = j.detail || j.message || JSON.stringify(j); }catch{}
       throw new Error(msg);
     }
-    const text = await res.text();
+    const buffer = await res.arrayBuffer();
+    const text = new TextDecoder("utf-8").decode(buffer);
     const data = JSON.parse(text);
     localStorage.setItem('sr_session_token', data.token);
     localStorage.setItem('sr_user_real_id', data.user_id || data.user.id);
@@ -220,7 +221,8 @@ async function handleLogin(e){
       try{ const j=JSON.parse(msg); msg = j.detail || JSON.stringify(j); }catch{}
       throw new Error(msg);
     }
-    const text = await res.text();
+    const buffer = await res.arrayBuffer();
+    const text = new TextDecoder("utf-8").decode(buffer);
     const data = JSON.parse(text);
     localStorage.setItem('sr_session_token', data.token);
     localStorage.setItem('sr_user_real_id', data.user_id || data.user.id);

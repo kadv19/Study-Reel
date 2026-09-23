@@ -11,8 +11,6 @@ from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from starlette.datastructures import Headers
-from starlette.middleware.base import BaseHTTPMiddleware
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "data" / "posts.json"
@@ -29,19 +27,11 @@ SLIDES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/slides", StaticFiles(directory=str(SLIDES_DIR)), name="slides")
 
 
-class NoCompressMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        # strip Accept-Encoding so upstream never compresses
-        headers = dict(request.headers)
-        headers.pop("accept-encoding", None)
-        headers.pop("Accept-Encoding", None)
-        request._headers = Headers(headers=headers)
-        response = await call_next(request)
-        response.headers["Content-Encoding"] = "identity"
-        return response
-
-
-app.add_middleware(NoCompressMiddleware)
+@app.middleware("http")
+async def disable_compression(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Encoding"] = "identity"
+    return response
 
 
 class SlideItem(BaseModel):
