@@ -3,7 +3,7 @@
   "appName": "StudyReel",
   "webDir": "instaclone",
   "server": {
-    "url": "https://bert-unbadgering-rolando.ngrok-free.dev",
+    "url": "https://studyreel-instaclone.onrender.com",
     "cleartext": false,
     "androidScheme": "https"
   },

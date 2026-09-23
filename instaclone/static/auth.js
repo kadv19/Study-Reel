@@ -85,6 +85,8 @@ async function handleSignup(e){
   if(row) row.classList.remove('error');
   const err = document.getElementById('collegeError');
   if(err) err.classList.remove('show');
+  const suErr = document.getElementById('suError');
+  if(suErr) suErr.classList.remove('show');
 
   const nameEl = document.getElementById('suName');
   const emailEl = document.getElementById('suEmail');
@@ -126,7 +128,8 @@ async function handleSignup(e){
     });
     if(!res.ok){
       let msg = await res.text();
-      try{ const j=JSON.parse(msg); msg = j.detail || JSON.stringify(j); }catch{}
+      console.log(`[auth] signup failed: status=${res.status} body=${msg}`);
+      try{ const j=JSON.parse(msg); msg = j.detail || j.message || JSON.stringify(j); }catch{}
       throw new Error(msg);
     }
     const data = await res.json();
@@ -148,7 +151,38 @@ async function handleSignup(e){
     }, 900);
     // keep button disabled while ink shows and redirect pending
   }catch(err){
+    console.log(`[auth] signup failed:`, err, err.message);
+    // Show real backend error instead of generic "try again"
+    let msg = err && err.message ? err.message : 'Signup failed – try again';
+    // Use existing collegeError as generic error display, or create suError under password field
+    let errorEl = document.getElementById('suError');
+    if(!errorEl){
+      const pwField = document.getElementById('suPassword');
+      const container = pwField ? pwField.parentElement : null;
+      if(container){
+        errorEl = document.createElement('div');
+        errorEl.id = 'suError';
+        errorEl.className = 'field-error show';
+        errorEl.style.display = 'block';
+        container.appendChild(errorEl);
+      } else {
+        errorEl = document.getElementById('collegeError');
+      }
+    }
+    if(errorEl){
+      errorEl.textContent = msg;
+      errorEl.classList.add('show');
+      errorEl.style.display = 'block';
+    }
     showFailInk('front');
+    // If message is short, also show it in the ink stamp for immediate visibility
+    try{
+      const ink = document.getElementById('inkFront');
+      if(ink && msg && msg.length < 40){
+        const span = ink.querySelector('span');
+        if(span) span.textContent = msg.toUpperCase().slice(0, 32);
+      }
+    }catch{}
     setBtnLoading(btn, false);
   }
 }
