@@ -14,7 +14,8 @@ async function loadDrawer(tray){
   try{
     const res = await fetch(`${BACKEND}/api/v1/cabinet?tray=${tray}`, {headers: headers()});
     if(!res.ok) throw new Error(res.status);
-    const data = await res.json();
+    const text = await res.text();
+    const data = JSON.parse(text);
     const cards = data.cards || [];
     if(cards.length===0){
       el.innerHTML = '<div class="empty-note">No cards yet</div>';

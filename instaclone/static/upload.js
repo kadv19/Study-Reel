@@ -93,7 +93,8 @@ generateBtn.addEventListener('click', async ()=>{
     log(`Uploading ${sFile.name} ${rFile ? '+ '+rFile.name : ''} as ${depth}/${tone} ×${slideCount}`);
     const res = await fetch(`${BACKEND}/api/v1/syllabus/upload`, {method:'POST', body: form, headers: uidHeaders()});
     if(!res.ok){ const t=await res.text(); throw new Error(t); }
-    uploaded = await res.json();
+    const upText = await res.text();
+    uploaded = JSON.parse(upText);
     log(`Extracted ${uploaded.modules.length} modules from ${uploaded.file_name}`);
     setProgress(15, `Extracted ${uploaded.modules.length} modules — generating tailored topics…`);
   }catch(e){
@@ -130,7 +131,8 @@ generateBtn.addEventListener('click', async ()=>{
         body: JSON.stringify({depth_format: depth, tone: tone, slide_count: slideCount})
       });
       if(!tRes.ok){ const t=await tRes.text(); throw new Error(t); }
-      const topics = await tRes.json();
+      const tText = await tRes.text();
+      const topics = JSON.parse(tText);
       log(`→ ${topics.length} topics for ${modLabel}: ${topics.map(t=>t.header).join(' | ').slice(0,120)}`);
       step++; setProgress(Math.round((step/totalSteps)*100), `Rendering carousel for ${modLabel}…`);
 
@@ -141,7 +143,8 @@ generateBtn.addEventListener('click', async ()=>{
         body: JSON.stringify({module_name: modLabel.slice(0,60), topics: topics})
       });
       if(!rRes.ok){ const t=await rRes.text(); throw new Error(t); }
-      const rendered = await rRes.json();
+      const rText = await rRes.text();
+      const rendered = JSON.parse(rText);
       log(`→ Rendered ${rendered.slide_count} slides (id ${rendered.id}, ${rendered.carousel_id})`);
       step++; setProgress(Math.round((step/totalSteps)*100), `Publishing ${modLabel}…`);
 
@@ -153,7 +156,7 @@ generateBtn.addEventListener('click', async ()=>{
           headers: jsonHeaders(),
           body: JSON.stringify({module_name: modLabel, topics: topics})
         });
-        if(mRes.ok) meta = await mRes.json();
+        if(mRes.ok) { const mText = await mRes.text(); meta = JSON.parse(mText); }
       }catch{}
       if(!meta) meta = {caption: `${modLabel} — key concepts!`, hashtags: ["studyreel","exam","learn"], cover_slide: 0};
       // ensure hashtags at least 3
@@ -164,7 +167,8 @@ generateBtn.addEventListener('click', async ()=>{
         body: JSON.stringify({carousel_id: rendered.id, caption: meta.caption, hashtags: meta.hashtags, cover_slide: Math.min(meta.cover_slide||0, topics.length-1)})
       });
       if(!pRes.ok){ const t=await pRes.text(); throw new Error(t); }
-      const pub = await pRes.json();
+      const pText = await pRes.text();
+      const pub = JSON.parse(pText);
       log(`→ Published ${modLabel} → ${pub.media_id} (${pub.provider||'instaclone'})`);
       results.push({module: modLabel, rendered, pub, topics});
       step++; setProgress(Math.round((step/totalSteps)*100), `${modLabel} done (${idx+1}/${modules.length})`);

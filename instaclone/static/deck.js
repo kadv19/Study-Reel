@@ -59,7 +59,7 @@ function updateBadge(){
   }
   // If name was fallback (no sr_user_name), try to fetch fresh from backend and retry
   if(!rawName || !rawName.trim()){
-    fetch(`${BACKEND}/api/v1/auth/me?token=${encodeURIComponent(TOKEN||'')}`, {headers: uidHeaders()}).then(r=>r.ok?r.json():null).then(u=>{
+    fetch(`${BACKEND}/api/v1/auth/me?token=${encodeURIComponent(TOKEN||'')}`, {headers: uidHeaders()}).then(r=>r.ok?r.text().then(t=>JSON.parse(t)):null).then(u=>{
       if(u && u.name && u.name.trim()){
         localStorage.setItem('sr_user_name', u.name);
         if(u.college) localStorage.setItem('sr_user_college', u.college);
@@ -282,8 +282,10 @@ async function loadLibrary(){
       fetch(`${BACKEND}/api/v1/shelves`, {headers: uidHeaders()})
     ]);
     if(bRes.status===401 || sRes.status===401){ location.href='/auth'; return; }
-    books = bRes.ok ? await bRes.json() : [];
-    shelves = sRes.ok ? await sRes.json() : [];
+    const bText = bRes.ok ? await bRes.text() : null;
+    books = bRes.ok ? JSON.parse(bText) : [];
+    const sText = sRes.ok ? await sRes.text() : null;
+    shelves = sRes.ok ? JSON.parse(sText) : [];
     // if library endpoint fails, fallback derive books from shelves
     renderLibrary();
     // if there's a book param, auto-open
@@ -326,7 +328,8 @@ async function loadDeck(shelfId, isReplay){
     const res = await fetch(url, {headers: uidHeaders()});
     if(res.status===401){ location.href='/auth'; return; }
     if(!res.ok) throw new Error(await res.text());
-    deck = await res.json();
+    const deckText = await res.text();
+    deck = JSON.parse(deckText);
     if(!deck.cards || deck.cards.length===0){
       // distinguish: if replay requested but still empty => truly no cards
       setEmptyState(true, 'No cards in this shelf — upload a syllabus and render.', false);
@@ -583,7 +586,8 @@ async function file(kind){
   }catch(e){ console.error('file', e); }
   try{
     const shelvesRes = await fetch(`${BACKEND}/api/v1/shelves`, {headers: uidHeaders()});
-    const ss = await shelvesRes.json();
+    const ssText = await shelvesRes.text();
+    const ss = JSON.parse(ssText);
     // update activeShelf fill locally and also update library book progress
     const updated = ss.find(s=>s.shelf_id===activeShelf.shelf_id);
     if(updated){

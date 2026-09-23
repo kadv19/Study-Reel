@@ -29,7 +29,8 @@ async function handleInteract(postId, action, btnEl = null, countEl = null) {
       body: JSON.stringify({ action })
     });
     if (!res.ok) return;
-    const data = await res.json();
+    const text = await res.text();
+    const data = JSON.parse(text);
     if (action === 'like') {
       postStates[postId].liked = true;
       if (btnEl) btnEl.classList.add('liked');
@@ -200,7 +201,8 @@ async function loadFeed(force=false) {
     if (currentTag && currentTag!=="all" && currentTag!=="trending" && currentTag!=="newest") params.set("tag", currentTag);
     const res = await fetch(`/api/feed?${params.toString()}`);
     if (!res.ok) return;
-    const data = await res.json();
+    const text = await res.text();
+    const data = JSON.parse(text);
     const posts = Array.isArray(data) ? data : (data.posts || []);
     const container = document.getElementById('feed-container');
     if (!container) return;
