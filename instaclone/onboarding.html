@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>StudyReel — Welcome Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#0a0e1a">
+<script>try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}</script>
+<style>
+  :root{
+    --bg:#0a0e1a; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a;
+    --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399;
+    --muted:#8b9bb4; --gold:#c9a15a; --gold-dark:#8a6a35;
+    --wood-1:#5a4636; --wood-2:#3c2f24;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; font-family:'Inter',sans-serif; color:#eef2f8;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(56,189,248,.08), transparent 45%),
+      radial-gradient(circle at 88% 88%, rgba(129,140,248,.08), transparent 42%),
+      var(--bg);
+  }
+  .mono{font-family:'Fira Code',monospace;}
+
+  .sheet{
+    width:100%; max-width:420px; min-height:640px; border-radius:16px; position:relative; overflow:hidden;
+    background:#0f1729; border:1px solid var(--border); box-shadow:0 30px 70px rgba(0,0,0,.5);
+    display:flex; flex-direction:column;
+  }
+
+  .skiprow{display:flex; justify-content:space-between; align-items:center; padding:18px 20px 0;}
+  .dots{display:flex; gap:6px;}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--border); transition:background .3s, width .3s;}
+  .dot.on{background:var(--cyan); width:18px; border-radius:4px;}
+  .skipbtn{background:none; border:none; color:var(--muted); font-size:12.5px; cursor:pointer; font-weight:600;}
+
+  .stagewrap{flex:1; position:relative;}
+  .stage{position:absolute; inset:0; padding:28px 26px 20px; display:flex; flex-direction:column; opacity:0; pointer-events:none; transition:opacity .4s;}
+  .stage.on{opacity:1; pointer-events:auto;}
+
+  .stage h2{font-family:'Fraunces',serif; font-size:23px; font-weight:600; margin:4px 0 8px; letter-spacing:-0.01em;}
+  .stage p.sub{font-size:13px; color:var(--muted); margin:0 0 20px; line-height:1.5;}
+
+  /* --- Step 1: intro --- */
+  .introglyph{font-family:'Fraunces',serif; font-size:64px; text-align:center; margin:30px 0 10px; opacity:.9;}
+
+  /* --- Step 2/3/4: swipe demo --- */
+  .demoarea{position:relative; flex:1; display:flex; align-items:center; justify-content:center;}
+  .democard{
+    width:190px; height:230px; border-radius:12px; background-color:var(--card); color:var(--card-ink);
+    background-image: repeating-linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.05) 1px, transparent 1px, transparent 22px);
+    box-shadow:0 16px 34px rgba(0,0,0,.35); padding:16px; display:flex; flex-direction:column;
+    transition: transform 1s cubic-bezier(.4,.1,.2,1), opacity .5s;
+  }
+  .democard .tag{font-size:9px; font-weight:700; padding:2px 7px; border-radius:20px; background:rgba(0,0,0,.06); align-self:flex-start;}
+  .democard h4{font-family:'Fraunces',serif; font-size:15px; margin:12px 0 6px;}
+  .democard .body{font-size:11px; color:#6b5c42; line-height:1.4;}
+
+  .demolabel{
+    position:absolute; padding:7px 14px; border-radius:20px; font-family:'Fraunces',serif; font-weight:600; font-size:13px;
+    opacity:0; transition:opacity .4s, transform .4s; pointer-events:none;
+  }
+  .lbl-review{left:8px; top:50%; transform:translateY(-50%) translateX(-10px); background:rgba(251,191,36,.18); color:var(--amber); border:1px solid rgba(251,191,36,.4);}
+  .lbl-mastered{right:8px; top:50%; transform:translateY(-50%) translateX(10px); background:rgba(52,211,153,.18); color:var(--green); border:1px solid rgba(52,211,153,.4);}
+  .lbl-catalog{left:50%; bottom:10px; transform:translateX(-50%) translateY(10px); background:rgba(56,189,248,.18); color:var(--cyan); border:1px solid rgba(56,189,248,.4);}
+  .demolabel.show{opacity:1; transform:translate(0,0) translateY(-50%);}
+  .lbl-catalog.show{transform:translateX(-50%) translateY(0);}
+
+  .arrowhint{position:absolute; font-size:26px; opacity:0; transition:opacity .3s;}
+  .arrowhint.show{opacity:.8;}
+  .ah-left{left:26px; top:50%; transform:translateY(-50%); color:var(--amber);}
+  .ah-right{right:26px; top:50%; transform:translateY(-50%); color:var(--green);}
+  .ah-down{left:50%; bottom:36px; transform:translateX(-50%); color:var(--cyan);}
+
+  /* --- Step 5: nav tour --- */
+  .navmock{display:flex; justify-content:center; margin-top:8px;}
+  .plank{display:flex; gap:4px; padding:6px; border-radius:10px; background:linear-gradient(160deg, var(--wood-1), var(--wood-2)); box-shadow:0 6px 16px rgba(0,0,0,.35);}
+  .navbtn{font-family:'Fraunces',serif; font-weight:600; font-size:12px; color:#f2e9d3; padding:8px 12px; border-radius:7px; position:relative; transition:background .3s;}
+  .navbtn.spot{background:linear-gradient(180deg,#e7c98a,var(--gold) 45%,var(--gold-dark)); color:#3a2c14;}
+  .navcaption{margin-top:22px; text-align:center;}
+  .navcaption .t{font-family:'Fraunces',serif; font-size:16px; font-weight:600; margin-bottom:6px;}
+  .navcaption .d{font-size:12.5px; color:var(--muted); line-height:1.5;}
+
+  .footer{padding:18px 24px 24px;}
+  .ctabtn{
+    width:100%; padding:14px; border-radius:10px; border:none; cursor:pointer;
+    font-family:'Fraunces',serif; font-weight:700; font-size:14.5px;
+    background:linear-gradient(180deg,#e7c98a,var(--gold) 45%,var(--gold-dark)); color:#3a2c14;
+    box-shadow:0 4px 0 var(--gold-dark), 0 8px 16px rgba(0,0,0,.25);
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="skiprow">
+    <div class="dots" id="dots"></div>
+    <button class="skipbtn" onclick="skipAll()">Skip</button>
+  </div>
+
+  <div class="stagewrap">
+
+    <!-- Step 0: welcome -->
+    <div class="stage on" data-step="0">
+      <div class="introglyph">§</div>
+      <h2 style="text-align:center">Welcome to your shelf</h2>
+      <p class="sub" style="text-align:center">StudyReel isn't a feed you scroll — it's a library you build. Quick tour, 20 seconds.</p>
+    </div>
+
+    <!-- Step 1: review (left) -->
+    <div class="stage" data-step="1">
+      <h2>Don't know it yet?</h2>
+      <p class="sub">Send it left, into Review. It'll come back around.</p>
+      <div class="demoarea">
+        <span class="arrowhint ah-left" id="ah1">←</span>
+        <div class="democard" id="card1">
+          <span class="tag">OS · MOD 3</span>
+          <h4>Round Robin Scheduling</h4>
+          <div class="body">Each process gets a fixed time quantum...</div>
+        </div>
+        <div class="demolabel lbl-review" id="lbl1">Review</div>
+      </div>
+    </div>
+
+    <!-- Step 2: mastered (right) -->
+    <div class="stage" data-step="2">
+      <h2>Know it cold?</h2>
+      <p class="sub">Send it right, into Mastered. Your shelf fills in.</p>
+      <div class="demoarea">
+        <span class="arrowhint ah-right" id="ah2">→</span>
+        <div class="democard" id="card2">
+          <span class="tag">OS · MOD 3</span>
+          <h4>Round Robin Scheduling</h4>
+          <div class="body">Each process gets a fixed time quantum...</div>
+        </div>
+        <div class="demolabel lbl-mastered" id="lbl2">Mastered</div>
+      </div>
+    </div>
+
+    <!-- Step 3: catalog (down) -->
+    <div class="stage" data-step="3">
+      <h2>Just curious?</h2>
+      <p class="sub">Push it down, into Catalog. No pressure, keep it for later.</p>
+      <div class="demoarea">
+        <span class="arrowhint ah-down" id="ah3">↓</span>
+        <div class="democard" id="card3">
+          <span class="tag">AI · GLOBAL</span>
+          <h4>Attention Is All You Need</h4>
+          <div class="body">Each token attends to every other token...</div>
+        </div>
+        <div class="demolabel lbl-catalog" id="lbl3">Catalog</div>
+      </div>
+    </div>
+
+    <!-- Step 4: flip -->
+    <div class="stage" data-step="4">
+      <h2>Every card has a back</h2>
+      <p class="sub">Tap "flip" for the exam angle — why it's actually asked.</p>
+      <div class="demoarea">
+        <div class="democard" id="card4" style="transition:transform .6s cubic-bezier(.4,.2,.2,1);">
+          <span class="tag" id="tag4">OS · MOD 3</span>
+          <h4 id="h4">Round Robin Scheduling</h4>
+          <div class="body" id="body4">Each process gets a fixed time quantum...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: nav tour -->
+    <div class="stage" data-step="5">
+      <h2>Three places you'll live</h2>
+      <p class="sub">&nbsp;</p>
+      <div class="navmock">
+        <div class="plank">
+          <div class="navbtn" id="nav-lib">Library</div>
+          <div class="navbtn" id="nav-up">Upload PDF</div>
+          <div class="navbtn" id="nav-cab">My Cabinet →</div>
+        </div>
+      </div>
+      <div class="navcaption">
+        <div class="t" id="navtitle">Library</div>
+        <div class="d" id="navdesc">Every book you've uploaded, shelved by module.</div>
+      </div>
+    </div>
+
+    <!-- Step 6: done -->
+    <div class="stage" data-step="6">
+      <div class="introglyph">✓</div>
+      <h2 style="text-align:center">That's the whole tour</h2>
+      <p class="sub" style="text-align:center">Go pull your first book off the shelf.</p>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <button class="ctabtn" id="ctabtn" onclick="advance()">Continue</button>
+  </div>
+</div>
+
+<script>
+const TOTAL_STEPS = 7; // 0..6
+let step = 0;
+let autoTimer = null;
+
+const dotsEl = document.getElementById('dots');
+for(let i=0;i<TOTAL_STEPS;i++){
+  const d = document.createElement('div');
+  d.className = 'dot' + (i===0 ? ' on' : '');
+  dotsEl.appendChild(d);
+}
+
+function renderDots(){
+  [...dotsEl.children].forEach((d,i)=> d.classList.toggle('on', i===step));
+}
+
+function showStep(n){
+  document.querySelectorAll('.stage').forEach(s=>{
+    s.classList.toggle('on', parseInt(s.dataset.step) === n);
+  });
+  renderDots();
+  document.getElementById('ctabtn').textContent = n === TOTAL_STEPS-1 ? 'Start browsing' : 'Continue';
+  clearTimeout(autoTimer);
+  runStepAnimation(n);
+}
+
+function advance(){
+  if(step >= TOTAL_STEPS-1){ finishOnboarding(); return; }
+  step++;
+  showStep(step);
+}
+
+function skipAll(){
+  step = TOTAL_STEPS-1;
+  showStep(step);
+}
+
+function finishOnboarding(){
+  const uid = localStorage.getItem('sr_user_real_id') || localStorage.getItem('sr_user_id');
+  if(uid){
+    localStorage.setItem(`sr_onboarding_seen_${uid}`, '1');
+  } else {
+    localStorage.setItem('sr_onboarding_seen', '1');
+  }
+  document.body.style.transition = 'opacity .3s';
+  document.body.style.opacity = '0';
+  setTimeout(()=> window.location.href = '/deck', 300);
+}
+
+function runStepAnimation(n){
+  if(n === 1){
+    const card = document.getElementById('card1'), ah = document.getElementById('ah1'), lbl = document.getElementById('lbl1');
+    card.style.transform = ''; ah.classList.remove('show'); lbl.classList.remove('show');
+    autoTimer = setTimeout(()=>{
+      ah.classList.add('show');
+      setTimeout(()=>{ lbl.classList.add('show'); card.style.transform = 'translateX(-70px) rotate(-8deg)'; }, 350);
+    }, 300);
+  }
+  if(n === 2){
+    const card = document.getElementById('card2'), ah = document.getElementById('ah2'), lbl = document.getElementById('lbl2');
+    card.style.transform = ''; ah.classList.remove('show'); lbl.classList.remove('show');
+    autoTimer = setTimeout(()=>{
+      ah.classList.add('show');
+      setTimeout(()=>{ lbl.classList.add('show'); card.style.transform = 'translateX(70px) rotate(8deg)'; }, 350);
+    }, 300);
+  }
+  if(n === 3){
+    const card = document.getElementById('card3'), ah = document.getElementById('ah3'), lbl = document.getElementById('lbl3');
+    card.style.transform = ''; ah.classList.remove('show'); lbl.classList.remove('show');
+    autoTimer = setTimeout(()=>{
+      ah.classList.add('show');
+      setTimeout(()=>{ lbl.classList.add('show'); card.style.transform = 'translateY(40px) scale(.94)'; }, 350);
+    }, 300);
+  }
+  if(n === 4){
+    const card = document.getElementById('card4');
+    const tag = document.getElementById('tag4'), h = document.getElementById('h4'), b = document.getElementById('body4');
+    card.style.transform = '';
+    tag.textContent = 'OS · MOD 3'; h.textContent = 'Round Robin Scheduling'; b.textContent = 'Each process gets a fixed time quantum...';
+    autoTimer = setTimeout(()=>{
+      card.style.transform = 'rotateY(180deg)';
+      setTimeout(()=>{
+        tag.textContent = 'WHY IT MATTERS';
+        h.textContent = 'Draw the Gantt chart';
+        b.textContent = 'VTU papers ask you to compute average waiting time too.';
+        card.style.transform = 'rotateY(360deg)';
+      }, 500);
+    }, 500);
+  }
+  if(n === 5){
+    const items = [
+      {id:'nav-lib', title:'Library', desc:"Every book you've uploaded, shelved by module."},
+      {id:'nav-up', title:'Upload PDF', desc:'Drop a new syllabus in — it becomes a book on your shelf.'},
+      {id:'nav-cab', title:'My Cabinet', desc:'Everything you filed — Review, Catalog, and Mastered, in one place.'}
+    ];
+    document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('spot'));
+    let i = 0;
+    function tick(){
+      document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('spot'));
+      const item = items[i];
+      document.getElementById(item.id).classList.add('spot');
+      document.getElementById('navtitle').textContent = item.title;
+      document.getElementById('navdesc').textContent = item.desc;
+      i = (i+1) % items.length;
+      autoTimer = setTimeout(tick, 1400);
+    }
+    tick();
+  }
+}
+
+showStep(0);
+</script>
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+  if(window.caches) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+}
+</script>
+</body>
+</html>

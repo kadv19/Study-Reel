@@ -93,11 +93,17 @@
     <span>Signed in as <strong id="cabUser" style="color:var(--text)"></strong></span>
     <a href="#" onclick="localStorage.removeItem('sr_session_token'); localStorage.removeItem('sr_user_real_id'); location.href='/auth'; return false;" style="color:var(--cyan); text-decoration:none; border:1px solid var(--border); padding:4px 10px; border-radius:9999px; background:var(--surface);">Log out</a>
   </div>
+  <div style="text-align:center; margin-top:10px;">
+    <a href="/onboarding" style="font-size:11px; color:var(--muted); text-decoration:none; border-bottom:1px dotted var(--muted);">Watch the tour again →</a>
+  </div>
 </div>
 <script>try{ const n=localStorage.getItem('sr_user_name')||localStorage.getItem('sr_user_real_id')||''; const el=document.getElementById('cabUser'); if(el) el.textContent=n; }catch{}</script>
 <script src="/static/cabinet.js"></script>
 <script>
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+  if(window.caches) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+}
 </script>
 </body>
 </html>

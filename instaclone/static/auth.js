@@ -1,50 +1,123 @@
-// StudyReel Auth — signup/login gate, visually strong, StudyReel dark theme
+// StudyReel Auth — Borrower's Pocket (book-cover + pull-out card)
+// Maps to SignupRequest/LoginRequest shape exactly — no backend changes
 const BACKEND = '';
 
-function switchTab(which){
-  const suTab = document.getElementById('tabSignup');
-  const liTab = document.getElementById('tabLogin');
-  const suForm = document.getElementById('formSignup');
-  const liForm = document.getElementById('formLogin');
-  if(which === 'signup'){
-    suTab.classList.add('active'); suTab.setAttribute('aria-selected','true');
-    liTab.classList.remove('active'); liTab.setAttribute('aria-selected','false');
-    suForm.classList.remove('hidden'); liForm.classList.add('hidden');
-  } else {
-    liTab.classList.add('active'); liTab.setAttribute('aria-selected','true');
-    suTab.classList.remove('active'); suTab.setAttribute('aria-selected','false');
-    liForm.classList.remove('hidden'); suForm.classList.add('hidden');
-  }
-  clearMessages();
-}
-function clearMessages(){
-  ['suError','suSuccess','liError','liSuccess'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el){ el.textContent=''; el.classList.remove('show'); }
-  });
-}
-function showError(id, msg){
-  const el=document.getElementById(id);
-  if(el){ el.textContent=msg; el.classList.add('show'); }
-}
-function showSuccess(id, msg){
-  const el=document.getElementById(id);
-  if(el){ el.textContent=msg; el.classList.add('show'); }
+function getChosenCollege(){
+  const el = document.querySelector('#collegeStamps .stamp.chosen');
+  return el ? el.dataset.college : null;
 }
 
+function flagCollegeError(){
+  const row = document.getElementById('collegeStamps');
+  const err = document.getElementById('collegeError');
+  if(row){
+    row.classList.remove('error');
+    // trigger reflow to restart animation
+    void row.offsetWidth;
+    row.classList.add('error');
+    setTimeout(()=> row.classList.remove('error'), 700);
+  }
+  if(err){
+    err.classList.add('show');
+    setTimeout(()=> err.classList.remove('show'), 2500);
+  }
+  // also muted stamp to make it obvious
+  showFailInk('front');
+}
+
+function showSuccessInk(side){
+  const id = side === 'front' ? 'inkFront' : 'inkBack';
+  const el = document.getElementById(id);
+  if(!el) return;
+  const span = el.querySelector('span');
+  if(span){
+    span.textContent = side === 'front' ? 'ISSUED' : 'WELCOME';
+    el.classList.remove('muted');
+  }
+  el.classList.add('show');
+  // keep visible long enough to read before redirect; caller will redirect after ~900ms
+  setTimeout(()=> el.classList.remove('show'), 1100);
+}
+
+function showFailInk(side){
+  const id = side === 'front' ? 'inkFront' : 'inkBack';
+  const el = document.getElementById(id);
+  if(!el) return;
+  const span = el.querySelector('span');
+  const prev = span ? span.textContent : '';
+  if(span) span.textContent = 'TRY AGAIN';
+  el.classList.add('muted');
+  el.classList.add('show');
+  setTimeout(()=>{
+    el.classList.remove('show');
+    setTimeout(()=>{
+      el.classList.remove('muted');
+      if(span) span.textContent = side === 'front' ? 'ISSUED' : 'WELCOME';
+    }, 200);
+  }, 1400);
+}
+
+function setBtnLoading(btn, loading, text){
+  if(!btn) return;
+  if(loading){
+    if(!btn.dataset.origText) btn.dataset.origText = btn.textContent;
+    btn.disabled = true;
+    btn.classList.add('loading');
+    if(text) btn.textContent = text;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    if(btn.dataset.origText){
+      btn.textContent = btn.dataset.origText;
+      delete btn.dataset.origText;
+    }
+  }
+}
+
+// Keep old tab helper harmless (no tabs in pocket design, but keep for compat)
+function switchTab(which){ /* no-op: pocket uses flipCard() */ }
+function clearMessages(){ /* pocket uses ink stamps, not .error divs */ }
+
 async function handleSignup(e){
-  e.preventDefault();
-  clearMessages();
-  const name = document.getElementById('suName').value.trim();
-  const college = document.getElementById('suCollege').value.trim().toUpperCase();
-  const email = document.getElementById('suEmail').value.trim().toLowerCase();
-  const password = document.getElementById('suPassword').value;
-  if(!name){ showError('suError','Enter your name'); return; }
-  if(!college || !['NIE','VVCE','SJCE'].includes(college)){ showError('suError','Select college: NIE, VVCE or SJCE'); return; }
-  if(!email || !email.includes('@')){ showError('suError','Enter a valid email'); return; }
-  if(!password || password.length < 6){ showError('suError','Password must be at least 6 characters'); return; }
-  const btn=document.getElementById('suBtn');
-  btn.disabled=true; btn.textContent='Creating…';
+  if(e && e.preventDefault) e.preventDefault();
+  // clear college error visuals
+  const row = document.getElementById('collegeStamps');
+  if(row) row.classList.remove('error');
+  const err = document.getElementById('collegeError');
+  if(err) err.classList.remove('show');
+
+  const nameEl = document.getElementById('suName');
+  const emailEl = document.getElementById('suEmail');
+  const pwEl = document.getElementById('suPassword');
+  const name = nameEl ? nameEl.value.trim() : '';
+  const collegeRaw = getChosenCollege();
+  const college = collegeRaw ? collegeRaw.trim().toUpperCase() : '';
+  const email = emailEl ? emailEl.value.trim().toLowerCase() : '';
+  const password = pwEl ? pwEl.value : '';
+
+  // client-side validation — mirror backend SignupRequest
+  if(!name){
+    showFailInk('front');
+    if(nameEl) nameEl.focus();
+    return;
+  }
+  if(!college || !['NIE','VVCE','SJCE'].includes(college)){
+    flagCollegeError();
+    return;
+  }
+  if(!email || !email.includes('@') || !email.split('@')[1].includes('.')){
+    showFailInk('front');
+    if(emailEl) emailEl.focus();
+    return;
+  }
+  if(!password || password.length < 6){
+    showFailInk('front');
+    if(pwEl) pwEl.focus();
+    return;
+  }
+
+  const btn = document.getElementById('suBtn');
+  setBtnLoading(btn, true, 'Stamping…');
   try{
     const res = await fetch(`${BACKEND}/api/v1/auth/signup`, {
       method:'POST',
@@ -62,25 +135,42 @@ async function handleSignup(e){
     localStorage.setItem('sr_user_name', data.user.name);
     localStorage.setItem('sr_user_email', data.user.email);
     localStorage.setItem('sr_user_college', data.user.college);
-    // keep legacy key for other files
     localStorage.setItem('sr_user_id', data.user_id || data.user.id);
-    showSuccess('suSuccess','Account created — taking you to your deck…');
-    setTimeout(()=>{ location.href='/deck'; }, 700);
+    showSuccessInk('front');
+    setTimeout(()=>{
+      const uid = data.user_id || data.user.id;
+      const perUserKey = `sr_onboarding_seen_${uid}`;
+      if(!localStorage.getItem(perUserKey)){
+        location.href='/onboarding';
+      } else {
+        location.href='/deck';
+      }
+    }, 900);
+    // keep button disabled while ink shows and redirect pending
   }catch(err){
-    showError('suError', 'Signup failed: ' + (err.message || err));
-    btn.disabled=false; btn.textContent='Create account →';
+    showFailInk('front');
+    setBtnLoading(btn, false);
   }
 }
 
 async function handleLogin(e){
-  e.preventDefault();
-  clearMessages();
-  const email = document.getElementById('liEmail').value.trim().toLowerCase();
-  const password = document.getElementById('liPassword').value;
-  if(!email || !email.includes('@')){ showError('liError','Enter a valid email'); return; }
-  if(!password){ showError('liError','Enter your password'); return; }
-  const btn=document.getElementById('liBtn');
-  btn.disabled=true; btn.textContent='Logging in…';
+  if(e && e.preventDefault) e.preventDefault();
+  const emailEl = document.getElementById('liEmail');
+  const pwEl = document.getElementById('liPassword');
+  const email = emailEl ? emailEl.value.trim().toLowerCase() : '';
+  const password = pwEl ? pwEl.value : '';
+  if(!email || !email.includes('@') || !email.split('@')[1].includes('.')){
+    showFailInk('back');
+    if(emailEl) emailEl.focus();
+    return;
+  }
+  if(!password){
+    showFailInk('back');
+    if(pwEl) pwEl.focus();
+    return;
+  }
+  const btn = document.getElementById('liBtn');
+  setBtnLoading(btn, true, 'Checking…');
   try{
     const res = await fetch(`${BACKEND}/api/v1/auth/login`, {
       method:'POST',
@@ -99,14 +189,61 @@ async function handleLogin(e){
     localStorage.setItem('sr_user_email', data.user.email);
     localStorage.setItem('sr_user_college', data.user.college);
     localStorage.setItem('sr_user_id', data.user_id || data.user.id);
-    showSuccess('liSuccess','Welcome back — loading your deck…');
-    setTimeout(()=>{ location.href='/deck'; }, 600);
+    showSuccessInk('back');
+    setTimeout(()=>{ location.href='/deck'; }, 900);
   }catch(err){
-    showError('liError', 'Login failed: ' + (err.message || err));
-    btn.disabled=false; btn.textContent='Log in →';
+    showFailInk('back');
+    setBtnLoading(btn, false);
+  }
+}
+
+// Wire the mockup's stampIt placeholder to real flows
+async function stampIt(side){
+  if(side === 'front'){
+    await handleSignup();
+  } else {
+    await handleLogin();
   }
 }
 
 window.switchTab = switchTab;
 window.handleSignup = handleSignup;
 window.handleLogin = handleLogin;
+window.stampIt = stampIt;
+window.getChosenCollege = getChosenCollege;
+window.flagCollegeError = flagCollegeError;
+window.showSuccessInk = showSuccessInk;
+window.showFailInk = showFailInk;
+
+// --- Phone keyboard: Enter / Go / Done should submit ---
+function bindEnterToStamp(){
+  const suIds = ['suName','suEmail','suPassword'];
+  const liIds = ['liEmail','liPassword'];
+  suIds.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter' || e.keyCode === 13){
+          e.preventDefault();
+          stampIt('front');
+        }
+      });
+    }
+  });
+  liIds.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter' || e.keyCode === 13){
+          e.preventDefault();
+          stampIt('back');
+        }
+      });
+    }
+  });
+}
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', bindEnterToStamp);
+} else {
+  bindEnterToStamp();
+}

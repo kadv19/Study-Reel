@@ -117,7 +117,10 @@
 </div>
 <script src="/static/upload.js"></script>
 <script>
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+  if(window.caches) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+}
 function toggleTheme(){ const b=document.body; const d=b.getAttribute('data-theme')==='dark'; b.setAttribute('data-theme', d?'light':'dark'); document.getElementById('themeBtn').textContent=d?'☀️':'🌙'; }
 </script>
 </body>

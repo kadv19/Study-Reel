@@ -9,40 +9,68 @@
 <meta name="theme-color" content="#0a0e1a">
 <script>try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}</script>
 <style>
-  :root{ --bg:#0a0e1a; --surface:#0f1729; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; --wood:#3a2f26; --wood-1:#4a3a2c; --wood-2:#3c2f24; --wood-3:#2a2019; --brass:#c9a15a; }
-  [data-theme="light"]{ --bg:#eef1f6; --surface:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; }
+  :root{ --bg:#0a0e1a; --surface:#0f1729; --panel:#0f1729; --card:#f4ecd8; --card-ink:#2a2116; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; --wood:#3a2f26; --wood-1:#5a4636; --wood-2:#3c2f24; --wood-3:#2a2019; --brass:#c9a15a; --gold:#c9a15a; --gold-dark:#8a6a35; --cloth-1:#5c2f2a; --cloth-2:#3d1f1c; --cloth2-1:#2f4a3e; --cloth2-2:#1e332a; --cloth3-1:#2f3d5c; --cloth3-2:#1e2740; --cloth4-1:#5c4a2f; --cloth4-2:#3d321e; }
+  [data-theme="light"]{ --bg:#eef1f6; --surface:#ffffff; --panel:#ffffff; --card:#fffdf6; --card-ink:#2a2116; --border:#e2e8f0; --text:#0f172a; --muted:#64748b; }
   *{box-sizing:border-box;}
   body{ margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; padding:12px 12px max(12px, env(safe-area-inset-bottom)); min-height:100dvh; background-image: radial-gradient(circle at 15% 8%, color-mix(in srgb, var(--cyan) 10%, transparent), transparent 45%), radial-gradient(circle at 90% 85%, color-mix(in srgb, var(--indigo) 10%, transparent), transparent 40%); transition:background-color .3s,color .3s; }
   .mono{font-family:'Fira Code',monospace;} .serif{font-family:'Fraunces',serif;}
   .wrap{width:100%; max-width:400px; display:flex; flex-direction:column; min-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));}
-  .topbar{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:10px; padding-top:env(safe-area-inset-top);}
-  .word{font-family:'Fraunces',serif; font-weight:600; font-size:23px; letter-spacing:-0.01em;}
-  .tagline{font-size:11.5px; color:var(--muted); margin-top:3px; font-style:italic;}
-  .themebtn{border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:20px; width:44px; height:44px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
+  .topbar{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; padding-top:env(safe-area-inset-top); flex-wrap:wrap; gap:10px;}
+  .brandblock .word{font-family:'Fraunces',serif; font-weight:700; font-size:23px; letter-spacing:-0.01em; cursor:pointer;}
+  .brandblock .tag{font-size:11.5px; color:var(--muted); font-style:italic; margin-top:3px;}
+  .navsign{display:flex; align-items:center; gap:10px;}
+  .plank{display:flex; align-items:center; gap:4px; padding:6px; border-radius:10px; background:linear-gradient(160deg, var(--wood-1), var(--wood-2)); box-shadow:0 6px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);}
+  .navbtn{font-family:'Fraunces',serif; font-weight:600; font-size:13px; color:#f2e9d3; padding:9px 12px; border-radius:7px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:background .15s, transform .15s; background:transparent; border:none; text-decoration:none;}
+  .navbtn:hover{background:rgba(255,255,255,.08); transform:translateY(-1px);}
+  .navbtn.active{background:linear-gradient(180deg,#e7c98a,var(--gold) 45%,var(--gold-dark)); color:#3a2c14; box-shadow:0 2px 8px rgba(0,0,0,.3);}
+  .navbtn .ic{font-size:13px;}
+  .themebtn{border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:20px; width:38px; height:38px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;}
   .cablink{font-size:11px; color:var(--muted); text-decoration:none; border:1px solid var(--border); padding:6px 10px; border-radius:20px; background:var(--surface);}
-  /* Library */
-  .library-head{display:flex; align-items:baseline; justify-content:space-between; margin:10px 2px 8px;}
-  .library-head .title{font-family:'Fraunces',serif; font-size:18px; font-weight:600;}
-  .library-head .count{font-size:11px; color:var(--muted);}
-  .book-row{display:flex; gap:12px; overflow-x:auto; padding:8px 2px 14px; scrollbar-width:none; scroll-snap-type:x mandatory;}
-  .book-row::-webkit-scrollbar{display:none;}
-  .book-cover{flex:0 0 150px; height:196px; border-radius:14px; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 44px), linear-gradient(155deg, var(--wood-1), var(--wood-2) 55%, var(--wood-3)); border:1px solid rgba(255,255,255,0.06); box-shadow:0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06); padding:14px 12px 12px; cursor:pointer; scroll-snap-align:start; display:flex; flex-direction:column; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s;}
-  .book-cover:hover{transform:translateY(-3px); box-shadow:0 14px 28px rgba(0,0,0,0.42);}
-  .book-cover::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg,var(--cyan),var(--indigo)); opacity:0.9;}
-  .book-cover .cover-spine{position:absolute; top:0; bottom:0; left:4px; width:10px; background:rgba(0,0,0,0.18); border-right:1px solid rgba(255,255,255,0.04);}
-  .book-cover .cover-top{flex:1; padding-left:8px;}
-  .book-cover .cover-title{font-family:'Fraunces',serif; font-size:14.5px; font-weight:600; color:#f5ecd8; line-height:1.25; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; padding-left:6px;}
-  .book-cover .cover-sub{font-size:10px; color:rgba(245,236,216,0.55); margin-top:6px; padding-left:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .book-cover .cover-meta{padding-left:6px; margin-top:8px;}
-  .book-cover .cover-progress{height:4px; background:rgba(255,255,255,0.15); border-radius:9999px; overflow:hidden;}
-  .book-cover .cover-progress .fill{height:100%; background:linear-gradient(90deg,var(--cyan),var(--indigo)); border-radius:9999px; transition:width 0.3s;}
-  .book-cover .cover-foot{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
-  .book-cover .cover-foot .pct{font-size:11px; font-weight:700; color:var(--cyan);}
-  .book-cover .cover-foot .sheets{font-size:10px; color:rgba(245,236,216,0.6);}
-  .book-cover .cover-ring{position:absolute; top:10px; right:10px; width:38px; height:38px; border-radius:50%; background:conic-gradient(var(--cyan) var(--ring-pct,0%), rgba(255,255,255,0.13) 0); display:flex; align-items:center; justify-content:center;}
-  .book-cover .cover-ring::before{content:''; position:absolute; inset:4px; border-radius:50%; background:var(--wood-2);}
-  .book-cover .cover-ring span{position:relative; font-size:9px; font-weight:800; color:#f5ecd8;}
-  /* Book toolbar */
+  /* welcome strip */
+  .welcome{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; padding:14px 16px; border-radius:12px; margin:10px 0 16px; background:linear-gradient(135deg, rgba(56,189,248,.08), rgba(129,140,248,.06)); border:1px solid var(--border);}
+  .welcome h2{font-family:'Fraunces',serif; font-weight:600; font-size:16px; margin:0 0 3px;}
+  .welcome p{margin:0; font-size:11.5px; color:var(--muted);}
+  .stat-chip{display:flex; gap:16px;}
+  .stat-chip div{text-align:center;}
+  .stat-chip .n{font-family:'Fraunces',serif; font-size:16px; font-weight:600; color:var(--cyan);}
+  .stat-chip .l{font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
+  .sectionhead{display:flex; align-items:baseline; justify-content:space-between; margin:10px 2px 10px;}
+  .sectionhead h1{font-family:'Fraunces',serif; font-size:18px; font-weight:600; margin:0;}
+  .sectionhead .count{font-size:11px; color:var(--muted);}
+  /* bookshelf - new cloth books */
+  .shelfblock{margin-bottom:6px;}
+  .booksrow{display:flex; align-items:flex-end; gap:14px; padding:12px 4px 0; overflow-x:auto; scrollbar-width:none; scroll-snap-type:x mandatory;}
+  .booksrow::-webkit-scrollbar{display:none;}
+  .ledge{height:12px; margin:0 2px; border-radius:0 0 6px 6px; background:linear-gradient(180deg, var(--wood-1), var(--wood-3)); box-shadow:0 8px 16px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08);}
+  .book{flex:0 0 auto; width:148px; height:210px; border-radius:6px 10px 10px 6px; position:relative; cursor:pointer; display:flex; flex-direction:column; padding:14px 12px; color:#f2e9d3; box-shadow: 4px 8px 18px rgba(0,0,0,.4), inset -8px 0 14px -10px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.04); transition: transform .2s cubic-bezier(.2,0,0,1), box-shadow .2s; scroll-snap-align:start;}
+  .book:hover{transform:translateY(-8px) rotate(-1deg); box-shadow:6px 16px 26px rgba(0,0,0,.5), inset -8px 0 14px -10px rgba(0,0,0,.5);}
+  .book::before{content:''; position:absolute; right:-4px; top:5px; bottom:5px; width:5px; border-radius:2px; background:repeating-linear-gradient(180deg, #f4ecd8 0 2px, #e3d4a8 2px 3px); box-shadow:1px 0 3px rgba(0,0,0,.3);}
+  .book .delete-btn{position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.15); color:rgba(242,233,211,0.9); font-size:11px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0; transition:opacity 0.15s, background 0.15s; z-index:2;}
+  .book:hover .delete-btn{opacity:1;}
+  .book .delete-btn:hover{background:rgba(165,55,47,0.85); border-color:rgba(165,55,47,1); color:white;}
+  .book.cloth1{background:linear-gradient(150deg, var(--cloth-1), var(--cloth-2));}
+  .book.cloth2{background:linear-gradient(150deg, var(--cloth2-1), var(--cloth2-2));}
+  .book.cloth3{background:linear-gradient(150deg, var(--cloth3-1), var(--cloth3-2));}
+  .book.cloth4{background:linear-gradient(150deg, var(--cloth4-1), var(--cloth4-2));}
+  .book .calltag{align-self:flex-start; font-family:'Fira Code',monospace; font-size:7.5px; padding:2px 6px; border-radius:3px; background:rgba(0,0,0,.25); color:rgba(242,233,211,.75);}
+  .book h3{font-family:'Fraunces',serif; font-size:14px; font-weight:600; line-height:1.2; margin:10px 0 3px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;}
+  .book .meta{font-size:9.5px; color:rgba(242,233,211,.6); margin-bottom:auto;}
+  .ribbonmark{position:absolute; top:0; right:16px; width:12px; border-radius:0 0 3px 3px; background:linear-gradient(180deg,#e24b4a,#a5372f); box-shadow:0 2px 5px rgba(0,0,0,.3);}
+  .book .footrow{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
+  .book .pct{font-family:'Fraunces',serif; font-weight:700; font-size:13px; color:var(--cyan);}
+  .book .frac{font-size:9px; color:rgba(242,233,211,.55);}
+  .book .bar{height:3px; border-radius:3px; background:rgba(0,0,0,.3); margin-top:6px; overflow:hidden;}
+  .book .bar span{display:block; height:100%; background:linear-gradient(90deg,var(--cyan),var(--indigo));}
+  /* identity footer - new idcard */
+  .idbar{margin-top:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px 14px; border-radius:12px; background:var(--surface); border:1px solid var(--border);}
+  .idleft{display:flex; align-items:center; gap:10px;}
+  .idcard{width:34px; height:24px; border-radius:4px; background:linear-gradient(150deg,#fbf6e8,#e3d4a8); display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:700; color:#3a2c14; font-size:12px; box-shadow:0 2px 6px rgba(0,0,0,.3);}
+  .idtext{font-size:11.5px;}
+  .idtext b{font-weight:700;}
+  .idtext .sep{color:var(--muted); margin:0 5px;}
+  .logoutbtn{padding:7px 12px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text); font-size:11px; font-weight:600; cursor:pointer; transition:background .15s;}
+  .logoutbtn:hover{background:rgba(255,255,255,.06);}
+  /* Book toolbar inside a book */
   .book-toolbar{display:flex; align-items:center; gap:10px; margin:6px 2px 10px;}
   .backbtn{font-size:11px; color:var(--muted); background:var(--surface); border:1px solid var(--border); padding:7px 12px; border-radius:9999px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-weight:600;}
   .backbtn:hover{border-color:var(--cyan); color:var(--text);}
@@ -69,8 +97,10 @@
   .deckhead{display:flex; align-items:baseline; justify-content:space-between; margin:10px 2px 10px;}
   .deckhead .name{font-family:'Fraunces',serif; font-size:16.5px; font-weight:600;}
   .deckhead .hint{font-size:11px; color:var(--muted);}
-  .stack-area{position:relative; flex:1; min-height:clamp(420px, 62dvh, 700px); height:clamp(420px, 62dvh, 700px); touch-action:none; display:flex; flex-direction:column;}
-  .card{position:absolute; inset:0; border-radius:12px; display:flex; flex-direction:column; box-shadow:0 18px 40px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.15); transition: transform .38s cubic-bezier(.2,0,0,1), opacity .32s, box-shadow .2s; perspective:1200px; min-height:0; height:100%;}
+  #bookView{flex:1; display:flex; flex-direction:column; min-height:0;}
+  #bookView[style*="display: none"]{display:none !important;}
+  .stack-area{position:relative; flex:1; min-height:0; height:auto; touch-action:none; display:flex; flex-direction:column;}
+  .card{position:absolute; inset:0; border-radius:12px; display:flex; flex-direction:column; box-shadow:0 18px 40px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.15); transition: transform .38s cubic-bezier(.2,0,0,1), opacity .32s, box-shadow .2s; perspective:1200px; min-height:0; height:100%; touch-action:none;}
   .card.back2{transform:scale(.94) translateY(14px) rotate(-2deg); z-index:1; opacity:.7; box-shadow:0 8px 20px rgba(0,0,0,.2);}
   .card.back3{transform:scale(.88) translateY(26px) rotate(2deg); z-index:0; opacity:.4; box-shadow:none;}
   .card.top{z-index:3; cursor:grab;}
@@ -84,7 +114,7 @@
   .ribbon{position:absolute; top:0; right:22px; width:16px; height:34px; background:linear-gradient(180deg,#e24b4a,#b8322f); clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); box-shadow:0 2px 4px rgba(0,0,0,.2);}
   .cardhead{display:flex; justify-content:space-between; align-items:center; padding:18px 20px 6px 42px;}
   .tab{font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(0,0,0,.06); color:var(--card-ink); opacity:.75;}
-  .cardbody{padding:4px 22px 10px 42px; flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; justify-content:flex-start; min-height:0; scrollbar-width:thin; scrollbar-color: var(--border) transparent; -webkit-overflow-scrolling:touch;}
+  .cardbody{padding:4px 22px 10px 42px; flex:1; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; justify-content:flex-start; min-height:0; scrollbar-width:thin; scrollbar-color: var(--border) transparent; -webkit-overflow-scrolling:touch; touch-action:pan-y; overscroll-behavior:contain;}
   .cardbody::-webkit-scrollbar{width:4px}
   .cardbody::-webkit-scrollbar-thumb{background:var(--border); border-radius:9999px}
   .cardbody h2{font-family:'Fraunces',serif; font-size:25px; font-weight:600; margin:6px 0 10px; letter-spacing:-0.01em; line-height:1.15;}
@@ -123,21 +153,43 @@
 <body data-theme="dark">
 <div class="wrap">
   <div class="topbar">
-    <div>
-      <div class="word">StudyReel</div>
-      <div class="tagline">a card catalog, not a feed</div>
+    <div class="brandblock">
+      <div class="word" onclick="showLibrary()" style="cursor:pointer" title="Go to My Library">StudyReel</div>
+      <div class="tag">a card catalog, not a feed</div>
     </div>
-    <div style="display:flex; gap:8px; align-items:center;">
-      <a class="cablink" href="/upload">Upload PDF</a>
-      <a class="cablink" href="/cabinet">My Cabinet →</a>
+    <div class="navsign">
+      <div class="plank">
+        <a class="navbtn active" href="#" onclick="showLibrary(); return false;"><span class="ic">📚</span>Library</a>
+        <a class="navbtn" href="/upload"><span class="ic">⬆</span>Upload PDF</a>
+        <a class="navbtn" href="/cabinet"><span class="ic">🗄</span>My Cabinet →</a>
+      </div>
       <button class="themebtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
     </div>
   </div>
 
-  <!-- Library Home -->
+  <!-- Library Home — bookshelf restyle -->
   <div id="libraryView">
-    <div class="library-head"><span class="title">My Library</span><span class="count" id="libraryCount">—</span></div>
-    <div id="bookRow" class="book-row"></div>
+    <div class="welcome">
+      <div>
+        <h2 id="welcomeTitle">Welcome back, —</h2>
+        <p>Pick up a book off the shelf, or add a new syllabus.</p>
+      </div>
+      <div class="stat-chip">
+        <div><div class="n" id="statBooks">0</div><div class="l">Books</div></div>
+        <div><div class="n" id="statShelves">0</div><div class="l">Shelves</div></div>
+        <div><div class="n" id="statAvg">0%</div><div class="l">Avg. filled</div></div>
+      </div>
+    </div>
+
+    <div class="sectionhead">
+      <h1>My Library</h1>
+      <span class="count" id="libraryCount">—</span>
+    </div>
+
+    <div class="shelfblock">
+      <div class="booksrow" id="bookRow"></div>
+      <div class="ledge"></div>
+    </div>
     <div id="libraryEmpty" class="empty" style="display:none">
       <div class="empty-icon">📚</div>
       <div style="font-weight:600; color:var(--text);">No books yet</div>
@@ -183,15 +235,23 @@
     <div class="dragtip" id="dragTip">try dragging the card toward a tray</div>
   </div>
 
-   <div id="accountBadge" style="text-align:center; font-size:11px; color:var(--muted); margin-top:12px; display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;">
-     <span>Signed in as <strong id="accountName" style="color:var(--text)">—</strong> <span id="accountCollege" style="opacity:0.7"></span></span>
-     <span style="opacity:0.35">·</span>
-     <a href="#" onclick="handleLogout(); return false;" style="color:var(--cyan); text-decoration:none; font-weight:600; border:1px solid var(--border); padding:4px 10px; border-radius:9999px; background:var(--surface);">Log out</a>
-   </div>
+  <div class="idbar" id="accountBadge">
+    <div class="idleft">
+      <div class="idcard" id="accountInitial">S</div>
+      <div class="idtext">Signed in as <b id="accountName">—</b><span class="sep">·</span><span id="accountCollege">—</span></div>
+    </div>
+    <button class="logoutbtn" onclick="handleLogout()">Log out</button>
+  </div>
 </div>
-<script src="/static/deck.js"></script>
+<script src="/static/deck.js?v=2"></script>
 <script>
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/static/sw.js').catch(()=>{}); }
+// Service worker was flagged as caching risk — unregister any existing and clear caches to prevent stale deck.js/deck.html on phone
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+  if(window.caches) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+}
+// Force update welcome heading after a short delay in case localStorage was not yet ready at initial updateBadge()
+setTimeout(()=>{ try{ if(typeof updateBadge==='function') updateBadge(); }catch(e){} }, 300);
 </script>
 </body>
 </html>

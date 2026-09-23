@@ -8,6 +8,7 @@ source of truth.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -244,6 +245,10 @@ def render_carousel(
 
     Returns:
         List of Path objects pointing to the rendered 1080x1350 PNG files.
+        The returned list is a subclass with an additional ``cloud_urls`` attribute
+        (list[str] parallel to the PNG list) containing Cloudinary CDN URLs
+        (empty string if upload was skipped/failed). The URLs are also persisted
+        to ``<out_dir>/cloud_urls.json`` for the publisher to consume.
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -256,6 +261,7 @@ def render_carousel(
     tailwind_css = compile_tailwind_css()
 
     generated_pngs: List[Path] = []
+    cloud_urls: List[str] = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -316,6 +322,28 @@ def render_carousel(
 
             generated_pngs.append(png_file)
 
+            # Upload to Cloudinary (graceful fallback if not configured / upload fails)
+            public_id = f"studyreel/{carousel.carousel_id}/slide_{idx:02d}"
+            try:
+                from app.storage.cloudinary_client import upload_image
+                url = upload_image(png_file, public_id)
+                cloud_urls.append(url or "")
+            except Exception:
+                cloud_urls.append("")
+
         browser.close()
 
-    return generated_pngs
+    # Persist cloud_urls alongside local renders for publisher consumption.
+    # Treat renders/ as temp — local PNGs stay for now, but publisher will prefer CDN URLs.
+    try:
+        (out_path / "cloud_urls.json").write_text(json.dumps(cloud_urls))
+    except Exception:
+        pass
+
+    # Extend return value minimally: subclass list with cloud_urls attribute
+    class _RenderResult(list):
+        pass
+
+    result = _RenderResult(generated_pngs)
+    result.cloud_urls = cloud_urls  # type: ignore[attr-defined]
+    return result

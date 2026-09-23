@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import uuid
 from pathlib import Path
@@ -27,15 +28,52 @@ class InstaClonePublisher:
         target = CLONE_SLIDES_DIR / post_id
         target.mkdir(parents=True, exist_ok=True)
 
+        # Try to load pre-uploaded Cloudinary URLs persisted by render.py
+        cloud_urls: list[str] = []
+        try:
+            cloud_path = Path(output_dir) / "cloud_urls.json"
+            if cloud_path.exists():
+                data = json.loads(cloud_path.read_text())
+                if isinstance(data, list):
+                    cloud_urls = [str(u) if u else "" for u in data]
+        except Exception:
+            cloud_urls = []
+
         slides = []
         for i, slide in enumerate(carousel.slides):
             fname = f"slide_{i + 1:02d}.png"
             src = Path(output_dir) / fname
-            if src.exists():
-                shutil.copy(src, target / fname)
+
+            # Prefer Cloudinary URL if available (render-time upload)
+            cloud_url = ""
+            if i < len(cloud_urls) and cloud_urls[i]:
+                cloud_url = cloud_urls[i]
+            else:
+                # Fallback: try live upload at publish time if render didn't upload
+                # (e.g., Cloudinary credentials were empty during render but now available,
+                # or renders were created before migration). Gracefully skip if not configured.
+                try:
+                    from app.storage.cloudinary_client import upload_image
+                    public_id = f"studyreel/{carousel.carousel_id}/slide_{i + 1:02d}"
+                    if src.exists():
+                        url = upload_image(src, public_id)
+                        if url:
+                            cloud_url = url
+                except Exception:
+                    cloud_url = ""
+
+            if cloud_url:
+                # No file copy needed — frontend can render https:// URL directly
+                image_path = cloud_url
+            else:
+                # Fallback to local file copy so app still works if Cloudinary is down / not configured
+                if src.exists():
+                    shutil.copy(src, target / fname)
+                image_path = f"/slides/{post_id}/{fname}"
+
             slides.append({
                 "slide_number": i + 1,
-                "image_path": f"/slides/{post_id}/{fname}",
+                "image_path": image_path,
                 "header": slide.topic.header,
             })
 

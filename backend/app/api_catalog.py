@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
 
-from app.db.database import get_carousel, get_library_summary, get_shelf_summary, list_card_states, upsert_card_state
+from app.db.database import delete_syllabus, get_carousel, get_library_summary, get_shelf_summary, list_card_states, upsert_card_state
 from app.schemas import FileCardRequest
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
@@ -53,6 +53,46 @@ def get_library(
     return get_library_summary(uid)
 
 
+@router.delete("/library/{book_id}")
+def delete_book(
+    book_id: str,
+    user_id: str = Header(None, alias="X-User-Id"),
+    user_id_q: Optional[str] = Query(None, alias="user_id"),
+) -> dict:
+    uid = (user_id or user_id_q or "anon").strip() or "anon"
+    try:
+        sid = int(book_id)
+    except:
+        raise HTTPException(400, "Invalid book id")
+    ok = delete_syllabus(sid, uid)
+    if not ok:
+        # check if exists but not owned
+        from app.db.database import get_syllabus_by_id
+        row = get_syllabus_by_id(sid)
+        if not row:
+            raise HTTPException(404, "Book not found")
+        raise HTTPException(403, "Not owner of this book")
+    return {"deleted": sid, "book_id": str(sid)}
+
+
+@router.delete("/books/{book_id}")
+def delete_book_alias(
+    book_id: str,
+    user_id: str = Header(None, alias="X-User-Id"),
+    user_id_q: Optional[str] = Query(None, alias="user_id"),
+) -> dict:
+    return delete_book(book_id, user_id, user_id_q)
+
+
+@router.delete("/syllabi/{syllabus_id}")
+def delete_syllabus_alias(
+    syllabus_id: str,
+    user_id: str = Header(None, alias="X-User-Id"),
+    user_id_q: Optional[str] = Query(None, alias="user_id"),
+) -> dict:
+    return delete_book(syllabus_id, user_id, user_id_q)
+
+
 @router.get("/deck")
 def get_deck(
     shelf: str = Query(..., description="shelf_id (carousel id) or label"),
@@ -90,6 +130,53 @@ def get_deck(
                     target = {"shelf_id": str(cid), "label": data.get("module_name","")[:12], "module_name": data.get("module_name",""), "carousel_id": cid, "total_slides": len(data.get("slides",[])), "mastered_count": 0, "fill_pct": 0}
         except Exception:
             pass
+    # Demo seed shelves (no real carousel) — return a small hard-coded demo deck
+    if target and target.get("is_seed"):
+        demo_nodes = {
+            "seed_ai_1": (["Transformer", "Attention", "Heads"], [["Transformer","Attention"],["Attention","Heads"]]),
+            "seed_ai_2": (["Query", "Key", "Value", "Softmax"], [["Query","Key"],["Key","Value"],["Value","Softmax"]]),
+            "seed_ev_1": (["Battery", "Inverter", "Motor"], [["Battery","Inverter"],["Inverter","Motor"]]),
+            "seed_ev_2": (["Cell", "BMS", "Pack"], [["Cell","BMS"],["BMS","Pack"]]),
+            "seed_aero_1": (["Wing", "Airflow", "Lift"], [["Wing","Airflow"],["Airflow","Lift"]]),
+            "seed_aero_2": (["Angle", "Polar", "Drag"], [["Angle","Polar"],["Polar","Drag"]]),
+            "seed_cs_1": (["Process", "Scheduler", "CPU"], [["Process","Scheduler"],["Scheduler","CPU"]]),
+            "seed_cs_2": (["Table", "Index", "Query"], [["Table","Index"],["Index","Query"]]),
+        }
+        sid = target["shelf_id"]
+        nodes, edges = demo_nodes.get(sid, (["Demo Node A","Demo Node B"], [["Demo Node A","Demo Node B"]]))
+        # Build a tiny 2-card demo deck for the seed shelf
+        demo_cards = []
+        for idx in range(2):
+            demo_cards.append({
+                "card_key": f"{sid}:{idx}",
+                "post_id": sid,
+                "slide_index": idx,
+                "status": "unfiled",
+                "front": {
+                    "header": target["label"],
+                    "body": f"Demo card {idx+1} for {target['label']} — upload your own syllabus to create real cards for your subjects.",
+                    "code": None,
+                    "language": "python",
+                    "slide_number": idx+1,
+                    "total_slides": 2,
+                    "diagram": {"nodes": nodes, "edges": [[a,b] for a,b in edges]},
+                },
+                "back": {
+                    "back_header": "Demo Shelf",
+                    "back_body": "This is a demo shelf (AI/EV/Aero) to show what your library will look like. Upload a syllabus to replace it with your own content.",
+                    "exam_weight": "medium",
+                },
+                "exam_weight": "medium",
+            })
+        return {
+            "shelf_id": target["shelf_id"],
+            "shelf_label": target["label"],
+            "module_name": target["module_name"],
+            "total_slides": 2,
+            "fill_pct": 0,
+            "cards": demo_cards,
+        }
+
     if not target or target.get("carousel_id") is None:
         raise HTTPException(404, f"Shelf {shelf} not found — upload syllabus and render first")
     cid = target["carousel_id"]

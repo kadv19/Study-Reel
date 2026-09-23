@@ -281,15 +281,21 @@ def export_carousel(carousel_id: int) -> StreamingResponse:
 
 def _latest_module_id(owner_user_id: str | None = None) -> int:
     """Resolve a module_id for carousel FK (latest syllabus's first module, owner-scoped if given)."""
-    from app.db.database import _connect
+    from app.db.database import _connect, _exec
 
-    with _connect() as conn:
+    conn = _connect()
+    try:
         if owner_user_id:
-            row = conn.execute(
-                "SELECT m.id FROM modules m JOIN syllabi s ON s.id=m.syllabus_id WHERE s.owner_user_id=? ORDER BY m.id DESC LIMIT 1",
+            cur = _exec(
+                conn,
+                "SELECT m.id FROM modules m JOIN syllabi s ON s.id=m.syllabus_id WHERE s.owner_user_id=%s ORDER BY m.id DESC LIMIT 1",
                 (owner_user_id,),
-            ).fetchone()
+            )
+            row = cur.fetchone()
             if row:
                 return row["id"]
-        row = conn.execute("SELECT id FROM modules ORDER BY id DESC LIMIT 1").fetchone()
+        cur = _exec(conn, "SELECT id FROM modules ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+    finally:
+        conn.close()
     return row["id"] if row else 1

@@ -59,7 +59,7 @@ Rules:
 - No preamble, no explanation, no markdown fence — output ONLY valid JSON.
 """
 
-CACHE_SCHEMA_VERSION = "v4"
+CACHE_SCHEMA_VERSION = "v5"
 
 
 def _hash(text: str) -> str:
@@ -75,14 +75,15 @@ def _build_system_prompt(depth_format: str = "detailed", tone: str = "default", 
     # depth/format
     if depth_format == "detailed":
         extras.append("Depth: detailed — full explanations, weave in provided resource notes when present, use complete sentences, keep body up to 140 chars but be thorough.")
-        if has_resource:
-            extras.append("Weave resource_text content into explanations when relevant — prioritize resource facts.")
     elif depth_format == "short":
         extras.append("Depth: short & crisp — even more concise than default, bodies ~60-90 chars, no filler, bullet-like but still a sentence.")
     elif depth_format == "diagram":
         extras.append("Format: diagram only — for each topic, instead of a prose body, output a structured `diagram` field: {\"nodes\": [\"...\"], \"edges\": [[\"A\",\"B\"], ...]} with max 6 nodes, describing a simple block diagram for that concept. Keep body very short (e.g. \"See diagram\" ≤ 40 chars) and include diagram. Body still required but minimal. Diagram should be self-contained per slide.")
     elif depth_format == "both":
         extras.append("Format: both — normal body text (max 140) PLUS a `diagram` field per topic: {\"nodes\": [...], \"edges\": [[...]]} max 6 nodes. Provide both prose and diagram.")
+    # resource weaving — always when present (A for both)
+    if has_resource:
+        extras.append("Weave the Additional resource notes into every topic where relevant — prioritize resource facts, examples, and terminology as primary source, while still staying within the syllabus scope.")
     # tone
     if tone == "eli5":
         extras.append("Tone: ELI5 — simple language, analogies, no jargon, explain like I'm 5 years old, friendly.")
@@ -137,10 +138,10 @@ class GeminiClient:
             return TypeAdapter(list[MicroTopic]).validate_python(cached)
 
         system_prompt = _build_system_prompt(depth_format, tone, slide_count, bool(resource_text))
-        # build contents with optional resource
+        # build contents with optional resource — always weave when present (A for both)
         effective_text = module_text
-        if resource_text and depth_format in ("detailed", "both"):
-            effective_text = f"{module_text}\n\nAdditional resource notes (weave into explanations when relevant):\n{resource_text[:6000]}"
+        if resource_text:
+            effective_text = f"{module_text}\n\nAdditional resource notes (weave into explanations when relevant, prioritize resource facts for accuracy):\n{resource_text[:6000]}"
 
         last_exc: Exception | None = None
         for attempt in range(max_retries + 1):

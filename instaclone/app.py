@@ -145,12 +145,19 @@ DECK_HTML = BASE_DIR / "deck.html"
 CABINET_HTML = BASE_DIR / "cabinet.html"
 UPLOAD_HTML = BASE_DIR / "upload.html"
 AUTH_HTML = BASE_DIR / "auth.html"
+ONBOARDING_HTML = BASE_DIR / "onboarding.html"
 
 @app.get("/auth", response_class=HTMLResponse)
 def serve_auth() -> HTMLResponse:
     if AUTH_HTML.exists():
         return HTMLResponse(content=AUTH_HTML.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404, detail="auth.html not found")
+
+@app.get("/onboarding", response_class=HTMLResponse)
+def serve_onboarding() -> HTMLResponse:
+    if ONBOARDING_HTML.exists():
+        return HTMLResponse(content=ONBOARDING_HTML.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="onboarding.html not found")
 
 @app.get("/deck", response_class=HTMLResponse)
 def serve_deck() -> HTMLResponse:

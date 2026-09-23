@@ -1,0 +1,30 @@
+{
+  "name": "studyreel",
+  "version": "1.0.0",
+  "description": "**Learn to scroll.** Turn any syllabus PDF (VTU or global) into swipeable 1080×1350 study cards. Flashcards meet Reels, but calm and exam-focused.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kadv19/Study-Reel.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kadv19/Study-Reel/issues"
+  },
+  "homepage": "https://github.com/kadv19/Study-Reel#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2"
+  }
+}

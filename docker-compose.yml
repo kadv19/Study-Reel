@@ -11,9 +11,12 @@ services:
       - HOST=0.0.0.0
       - PORT=8000
       - INSTACLONE_URL=http://instaclone:8100
+      - DATABASE_URL=postgresql://studyreel:password@db:5432/studyreel
     volumes:
       - ./backend:/app
       - ./instaclone:/instaclone
+    depends_on:
+      - db
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir /app
 
   instaclone:
@@ -38,3 +41,18 @@ services:
     volumes:
       - ./dashboard:/app
     command: streamlit run studyreel_dashboard.py --server.port 8501 --server.address 0.0.0.0
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: studyreel
+      POSTGRES_USER: studyreel
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
