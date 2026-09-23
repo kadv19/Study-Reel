@@ -35,6 +35,7 @@ instaclone/data/
 # Docs figures — keep despite *.png
 !docs/figures/*.png
 !docs/figures/**/*.png
+!instaclone/static/icon-*.png
 
 # Test temp / report (never commit)
 .pytest_temp/
