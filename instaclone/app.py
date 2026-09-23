@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
+from starlette.middleware.base import BaseHTTPMiddleware
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_FILE = BASE_DIR / "data" / "posts.json"
@@ -25,6 +27,21 @@ if STATIC_DIR.exists():
 # Publisher copies PNGs to instaclone/data/slides/{post_id}/ and expects /slides/{post_id}/slide_*.png
 SLIDES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/slides", StaticFiles(directory=str(SLIDES_DIR)), name="slides")
+
+
+class NoCompressMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # strip Accept-Encoding so upstream never compresses
+        headers = dict(request.headers)
+        headers.pop("accept-encoding", None)
+        headers.pop("Accept-Encoding", None)
+        request._headers = Headers(headers=headers)
+        response = await call_next(request)
+        response.headers["Content-Encoding"] = "identity"
+        return response
+
+
+app.add_middleware(NoCompressMiddleware)
 
 
 class SlideItem(BaseModel):
@@ -197,8 +214,9 @@ async def _proxy(request: Request) -> Response:
     url = f"{BACKEND_URL}{request.url.path}"
     if request.url.query:
         url += f"?{request.url.query}"
-    # forward headers except hop-by-hop
+    # forward headers except hop-by-hop, force identity so backend never compresses
     headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length", "connection")}
+    headers["Accept-Encoding"] = "identity"
     body = await request.body()
     async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
         resp = await client.request(request.method, url, headers=headers, content=body)
