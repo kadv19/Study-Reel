@@ -18,6 +18,7 @@ function flagCollegeError(){
     setTimeout(()=> row.classList.remove('error'), 700);
   }
   if(err){
+    err.textContent = 'Please select your college';
     err.classList.add('show');
     setTimeout(()=> err.classList.remove('show'), 2500);
   }
@@ -120,11 +121,13 @@ async function handleSignup(e){
 
   const btn = document.getElementById('suBtn');
   setBtnLoading(btn, true, 'Stamping…');
+  const payload = {name, college, email, password};
+  console.log('[auth] signup payload', JSON.stringify(payload));
   try{
     const res = await fetch(`${BACKEND}/api/v1/auth/signup`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name, college, email, password})
+      body: JSON.stringify(payload)
     });
     if(!res.ok){
       let msg = await res.text();
