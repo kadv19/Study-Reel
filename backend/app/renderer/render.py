@@ -16,7 +16,7 @@ from typing import List, Optional, Union
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from PIL import Image
-from playwright.sync_api import sync_playwright
+from weasyprint import HTML
 
 from app.renderer.highlight import highlight_code
 from app.schemas import Carousel, Slide
@@ -236,12 +236,13 @@ def render_carousel(
     device_scale_factor: int = 2,
 ) -> List[Path]:
     """
-    Render a StudyReel Carousel into 1080x1350 PNG images using headless Playwright.
+    Render a StudyReel Carousel into 1080x1350 PNG images using WeasyPrint.
 
     Args:
         carousel: Carousel Pydantic model instance (canonical schema).
         out_dir: Directory where PNG slides will be saved.
-        device_scale_factor: Playwright device scale factor (default 2 for razor-sharp rendering).
+        device_scale_factor: Kept for API compatibility; WeasyPrint is resolution-independent
+            and renders at 96dpi. The parameter is ignored but accepted.
 
     Returns:
         List of Path objects pointing to the rendered 1080x1350 PNG files.
@@ -263,75 +264,46 @@ def render_carousel(
     generated_pngs: List[Path] = []
     cloud_urls: List[str] = []
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-gpu",
-                "--font-render-hinting=none",
-            ],
+    for idx, slide in enumerate(carousel.slides, start=1):
+        slide_html = render_slide_html(
+            slide=slide,
+            carousel=carousel,
+            index=idx - 1,
+            jinja_env=jinja_env,
+            fonts_css=fonts_css,
+            tailwind_css=tailwind_css,
         )
-        context = browser.new_context(
-            viewport={"width": 1080, "height": 1350},
-            device_scale_factor=device_scale_factor,
-        )
-        page = context.new_page()
 
-        for idx, slide in enumerate(carousel.slides, start=1):
-            slide_html = render_slide_html(
-                slide=slide,
-                carousel=carousel,
-                index=idx - 1,
-                jinja_env=jinja_env,
-                fonts_css=fonts_css,
-                tailwind_css=tailwind_css,
-            )
+        # File path for current slide
+        png_file = out_path / f"slide_{idx:02d}.png"
 
-            # Load slide HTML into Playwright page
-            page.set_content(slide_html, wait_until="networkidle")
+        # Render HTML to PNG via WeasyPrint (pure Python, no browser binary)
+        # base_url ensures relative assets resolve; HTML templates are self-contained
+        HTML(string=slide_html, base_url=str(TEMPLATES_DIR)).write_png(str(png_file))
 
-            # Wait for all fonts to be fully loaded and layout to be completely stable
-            page.evaluate("() => document.fonts.ready")
-            page.wait_for_timeout(60)
+        if not png_file.exists() or png_file.stat().st_size == 0:
+            raise RuntimeError(f"Failed to generate slide image at {png_file}")
 
-            # File path for current slide
-            png_file = out_path / f"slide_{idx:02d}.png"
-            temp_png = out_path / f"_temp_slide_{idx:02d}.png"
+        # Ensure exact 1080x1350 size (resize if WeasyPrint default differs)
+        with Image.open(png_file) as img:
+            if img.size != (1080, 1350):
+                resized = img.resize((1080, 1350), Image.Resampling.LANCZOS)
+                resized.save(png_file, format="PNG", optimize=True)
 
-            if device_scale_factor == 1:
-                page.screenshot(path=str(png_file), type="png")
-            else:
-                page.screenshot(path=str(temp_png), type="png")
-                with Image.open(temp_png) as img:
-                    if img.size != (1080, 1350):
-                        resized = img.resize((1080, 1350), Image.Resampling.LANCZOS)
-                        resized.save(png_file, format="PNG", optimize=True)
-                    else:
-                        img.save(png_file, format="PNG", optimize=True)
-                if temp_png.exists():
-                    temp_png.unlink()
+        with Image.open(png_file) as img:
+            if img.size != (1080, 1350):
+                raise ValueError(f"Rendered PNG size {img.size} does not match required (1080, 1350)")
 
-            if not png_file.exists() or png_file.stat().st_size == 0:
-                raise RuntimeError(f"Failed to generate slide image at {png_file}")
+        generated_pngs.append(png_file)
 
-            with Image.open(png_file) as img:
-                if img.size != (1080, 1350):
-                    raise ValueError(f"Rendered PNG size {img.size} does not match required (1080, 1350)")
-
-            generated_pngs.append(png_file)
-
-            # Upload to Cloudinary (graceful fallback if not configured / upload fails)
-            public_id = f"studyreel/{carousel.carousel_id}/slide_{idx:02d}"
-            try:
-                from app.storage.cloudinary_client import upload_image
-                url = upload_image(png_file, public_id)
-                cloud_urls.append(url or "")
-            except Exception:
-                cloud_urls.append("")
-
-        browser.close()
+        # Upload to Cloudinary (graceful fallback if not configured / upload fails)
+        public_id = f"studyreel/{carousel.carousel_id}/slide_{idx:02d}"
+        try:
+            from app.storage.cloudinary_client import upload_image
+            url = upload_image(png_file, public_id)
+            cloud_urls.append(url or "")
+        except Exception:
+            cloud_urls.append("")
 
     # Persist cloud_urls alongside local renders for publisher consumption.
     # Treat renders/ as temp — local PNGs stay for now, but publisher will prefer CDN URLs.
