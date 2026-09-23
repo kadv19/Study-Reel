@@ -1,6 +1,6 @@
 // Upload page — dropdown-driven auto-publish (no checklist)
 try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
-const BACKEND = '';
+const BACKEND = window.STUDYREEL_BACKEND || '';
 function uidHeaders(){
   const id = localStorage.getItem('sr_user_real_id') || localStorage.getItem('sr_user_id') || 'anon';
   const tok = localStorage.getItem('sr_session_token') || '';
@@ -91,7 +91,7 @@ generateBtn.addEventListener('click', async ()=>{
     form.append('file', sFile);
     if(rFile) form.append('resource_file', rFile);
     log(`Uploading ${sFile.name} ${rFile ? '+ '+rFile.name : ''} as ${depth}/${tone} ×${slideCount}`);
-    const res = await fetch(`${BACKEND}/api/v1/syllabus/upload`, {method:'POST', body: form, headers: uidHeaders()});
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/syllabus/upload`, {method:'POST', body: form, headers: uidHeaders()});
     if(!res.ok){ const t=await res.text(); throw new Error(t); }
     const upText = await res.text();
     uploaded = JSON.parse(upText);
@@ -125,7 +125,7 @@ generateBtn.addEventListener('click', async ()=>{
       // 1) topics
       setProgress(Math.round((step/totalSteps)*100), `Generating topics for ${modLabel} (${idx+1}/${modules.length})…`);
       log(`Generating topics for ${modLabel} — ${depth}/${tone} ×${slideCount}`);
-      const tRes = await fetch(`${BACKEND}/api/v1/modules/${mod.module_number}/topics`, {
+      const tRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/modules/${mod.module_number}/topics`, {
         method:'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({depth_format: depth, tone: tone, slide_count: slideCount})
@@ -137,7 +137,7 @@ generateBtn.addEventListener('click', async ()=>{
       step++; setProgress(Math.round((step/totalSteps)*100), `Rendering carousel for ${modLabel}…`);
 
       // 2) render
-      const rRes = await fetch(`${BACKEND}/api/v1/carousels/render`, {
+      const rRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/carousels/render`, {
         method:'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({module_name: modLabel.slice(0,60), topics: topics})
@@ -151,7 +151,7 @@ generateBtn.addEventListener('click', async ()=>{
       // 3) auto caption via preview (don't show edit)
       let meta = null;
       try{
-        const mRes = await fetch(`${BACKEND}/api/v2/metadata/preview`, {
+        const mRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v2/metadata/preview`, {
           method:'POST',
           headers: jsonHeaders(),
           body: JSON.stringify({module_name: modLabel, topics: topics})
@@ -161,7 +161,7 @@ generateBtn.addEventListener('click', async ()=>{
       if(!meta) meta = {caption: `${modLabel} — key concepts!`, hashtags: ["studyreel","exam","learn"], cover_slide: 0};
       // ensure hashtags at least 3
       if(!meta.hashtags || meta.hashtags.length<3) meta.hashtags = ["studyreel","exam","learn"];
-      const pRes = await fetch(`${BACKEND}/api/v2/publish`, {
+      const pRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v2/publish`, {
         method:'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({carousel_id: rendered.id, caption: meta.caption, hashtags: meta.hashtags, cover_slide: Math.min(meta.cover_slide||0, topics.length-1)})

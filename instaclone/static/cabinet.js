@@ -1,6 +1,6 @@
 // Cabinet: fetch drawers from GET /api/v1/cabinet?tray=... (Got it display, mastered enum)
 try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
-const BACKEND = '';
+const BACKEND = window.STUDYREEL_BACKEND || '';
 let USER_ID = localStorage.getItem('sr_user_real_id') || localStorage.getItem('sr_user_id') || 'anon';
 const REAL_ID = localStorage.getItem('sr_user_real_id') || null;
 const TOKEN = localStorage.getItem('sr_session_token') || '';
@@ -12,7 +12,7 @@ async function loadDrawer(tray){
   const el = document.getElementById(id);
   if(!el) return;
   try{
-    const res = await fetch(`${BACKEND}/api/v1/cabinet?tray=${tray}`, {headers: headers()});
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/cabinet?tray=${tray}`, {headers: headers()});
     if(!res.ok) throw new Error(res.status);
     const text = await res.text();
     const data = JSON.parse(text);

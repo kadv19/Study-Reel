@@ -1,6 +1,6 @@
 // StudyReel Auth — Borrower's Pocket (book-cover + pull-out card)
 // Maps to SignupRequest/LoginRequest shape exactly — no backend changes
-const BACKEND = '';
+const BACKEND = window.STUDYREEL_BACKEND || '';
 
 function getChosenCollege(){
   const el = document.querySelector('#collegeStamps .stamp.chosen');
@@ -124,7 +124,7 @@ async function handleSignup(e){
   const payload = {name, college, email, password};
   console.log('[auth] signup payload', JSON.stringify(payload));
   try{
-    const res = await fetch(`${BACKEND}/api/v1/auth/signup`, {
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/auth/signup`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
@@ -135,9 +135,7 @@ async function handleSignup(e){
       try{ const j=JSON.parse(msg); msg = j.detail || j.message || JSON.stringify(j); }catch{}
       throw new Error(msg);
     }
-    const buffer = await res.arrayBuffer();
-    const text = new TextDecoder("utf-8").decode(buffer);
-    const data = JSON.parse(text);
+    const data = await res.json();
     localStorage.setItem('sr_session_token', data.token);
     localStorage.setItem('sr_user_real_id', data.user_id || data.user.id);
     localStorage.setItem('sr_user_name', data.user.name);
@@ -211,7 +209,7 @@ async function handleLogin(e){
   const btn = document.getElementById('liBtn');
   setBtnLoading(btn, true, 'Checking…');
   try{
-    const res = await fetch(`${BACKEND}/api/v1/auth/login`, {
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/auth/login`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email, password})
@@ -221,9 +219,7 @@ async function handleLogin(e){
       try{ const j=JSON.parse(msg); msg = j.detail || JSON.stringify(j); }catch{}
       throw new Error(msg);
     }
-    const buffer = await res.arrayBuffer();
-    const text = new TextDecoder("utf-8").decode(buffer);
-    const data = JSON.parse(text);
+    const data = await res.json();
     localStorage.setItem('sr_session_token', data.token);
     localStorage.setItem('sr_user_real_id', data.user_id || data.user.id);
     localStorage.setItem('sr_user_name', data.user.name);

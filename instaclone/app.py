@@ -193,6 +193,13 @@ def serve_root() -> HTMLResponse:
     return HTMLResponse(content=FEED_HTML.read_text(encoding="utf-8") if FEED_HTML.exists() else "<h1>StudyReel</h1>")
 
 
+@app.get("/config.js")
+async def config_js():
+    backend_url = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
+    js = f"window.STUDYREEL_BACKEND = '{backend_url}';"
+    return Response(content=js, media_type="application/javascript")
+
+
 # ---- Proxy backend API (single tunnel) ------------------------------------
 # Any /api/v1/* or /api/v2/* not handled locally is forwarded to backend 8000.
 # This collapses two tunnels into one: phone -> instaclone 8100 -> backend 8000.

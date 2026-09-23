@@ -1,5 +1,5 @@
 // Deck: library (books → shelves), stack, flip, drag-to-file + replayMode
-const BACKEND = '';
+const BACKEND = window.STUDYREEL_BACKEND || '';
 try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
 let USER_ID = localStorage.getItem('sr_user_real_id') || localStorage.getItem('sr_user_id') || 'anon';
 let REAL_ID = localStorage.getItem('sr_user_real_id') || null;
@@ -59,7 +59,7 @@ function updateBadge(){
   }
   // If name was fallback (no sr_user_name), try to fetch fresh from backend and retry
   if(!rawName || !rawName.trim()){
-    fetch(`${BACKEND}/api/v1/auth/me?token=${encodeURIComponent(TOKEN||'')}`, {headers: uidHeaders()}).then(r=>r.ok?r.text().then(t=>JSON.parse(t)):null).then(u=>{
+    fetch(`${window.STUDYREEL_BACKEND}/api/v1/auth/me?token=${encodeURIComponent(TOKEN||'')}`, {headers: uidHeaders()}).then(r=>r.ok?r.text().then(t=>JSON.parse(t)):null).then(u=>{
       if(u && u.name && u.name.trim()){
         localStorage.setItem('sr_user_name', u.name);
         if(u.college) localStorage.setItem('sr_user_college', u.college);
@@ -78,7 +78,7 @@ setTimeout(updateBadge, 500);
 function handleLogout(){
   try{
     const tok = localStorage.getItem('sr_session_token');
-    if(tok) fetch(`${BACKEND}/api/v1/auth/logout`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token: tok})}).catch(()=>{});
+    if(tok) fetch(`${window.STUDYREEL_BACKEND}/api/v1/auth/logout`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token: tok})}).catch(()=>{});
   }catch{}
   localStorage.removeItem('sr_session_token');
   localStorage.removeItem('sr_user_real_id');
@@ -124,7 +124,7 @@ async function deleteBook(bookId, event){
   const label = b ? b.label : bookId;
   if(!confirm(`Delete "${label}"? This will remove all its shelves and cards. This cannot be undone.`)) return;
   try{
-    const res = await fetch(`${BACKEND}/api/v1/library/${encodeURIComponent(bookId)}`, {method:'DELETE', headers: uidHeaders()});
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/library/${encodeURIComponent(bookId)}`, {method:'DELETE', headers: uidHeaders()});
     if(!res.ok){
       let msg = await res.text();
       try{ const j=JSON.parse(msg); msg=j.detail||msg; }catch{}
@@ -278,8 +278,8 @@ function setEmptyState(show, message, showReplay){
 async function loadLibrary(){
   try{
     const [bRes, sRes] = await Promise.all([
-      fetch(`${BACKEND}/api/v1/library`, {headers: uidHeaders()}),
-      fetch(`${BACKEND}/api/v1/shelves`, {headers: uidHeaders()})
+      fetch(`${window.STUDYREEL_BACKEND}/api/v1/library`, {headers: uidHeaders()}),
+      fetch(`${window.STUDYREEL_BACKEND}/api/v1/shelves`, {headers: uidHeaders()})
     ]);
     if(bRes.status===401 || sRes.status===401){ location.href='/auth'; return; }
     const bText = bRes.ok ? await bRes.text() : null;
@@ -324,7 +324,7 @@ async function selectShelf(shelfId){
 
 async function loadDeck(shelfId, isReplay){
   try{
-    const url = `${BACKEND}/api/v1/deck?shelf=${encodeURIComponent(shelfId)}` + (isReplay ? '&replay=1' : '');
+    const url = `${window.STUDYREEL_BACKEND}/api/v1/deck?shelf=${encodeURIComponent(shelfId)}` + (isReplay ? '&replay=1' : '');
     const res = await fetch(url, {headers: uidHeaders()});
     if(res.status===401){ location.href='/auth'; return; }
     if(!res.ok) throw new Error(await res.text());
@@ -582,10 +582,10 @@ async function file(kind){
   if(trays[kind]) trays[kind].classList.add(pulse[kind]);
   setTimeout(()=>{ if(trays[kind]) trays[kind].className='tray'; }, 500);
   try{
-    await fetch(`${BACKEND}/api/v1/file`, {method:'POST', headers:{'Content-Type':'application/json', ...uidHeaders()}, body: JSON.stringify({post_id: card.post_id, slide_index: card.slide_index, status: kind})});
+    await fetch(`${window.STUDYREEL_BACKEND}/api/v1/file`, {method:'POST', headers:{'Content-Type':'application/json', ...uidHeaders()}, body: JSON.stringify({post_id: card.post_id, slide_index: card.slide_index, status: kind})});
   }catch(e){ console.error('file', e); }
   try{
-    const shelvesRes = await fetch(`${BACKEND}/api/v1/shelves`, {headers: uidHeaders()});
+    const shelvesRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/shelves`, {headers: uidHeaders()});
     const ssText = await shelvesRes.text();
     const ss = JSON.parse(ssText);
     // update activeShelf fill locally and also update library book progress
