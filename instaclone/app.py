@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -189,7 +190,7 @@ def serve_root() -> HTMLResponse:
 # Any /api/v1/* or /api/v2/* not handled locally is forwarded to backend 8000.
 # This collapses two tunnels into one: phone -> instaclone 8100 -> backend 8000.
 
-BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 
 
 async def _proxy(request: Request) -> Response:
