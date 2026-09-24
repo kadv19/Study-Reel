@@ -29,38 +29,37 @@ BIN_DIR = RENDERER_DIR / "bin"
 
 DEFAULT_AUTHOR = "StudyReel"
 
-# html2png.dev — hosted HTML→PNG, no system libs, no API key.
-# Renders the full HTML string in headless Chromium and returns {"url": ...}.
-HTML2PNG_API_URL = "https://html2png.dev/api/convert?width=1080&height=1350&format=png"
+# Rendex — hosted HTML→PNG, no system libs. Free tier covers render workloads.
+# POSTs raw HTML as JSON, returns raw binary PNG data.
+RENDEX_API_URL = "https://api.rendex.dev/v1/screenshot"
 
 
-def _render_html_to_png_via_html2png(slide_html: str, png_file: Path, timeout: float = 90.0) -> str:
-    """POST raw HTML to html2png.dev, download the hosted PNG to png_file.
+def _render_html_to_png_via_rendex(slide_html: str, png_file: Path, timeout: float = 90.0) -> None:
+    """POST raw HTML to Rendex, write the binary PNG response to png_file.
 
-    Returns the hosted PNG URL (used directly as the slide's cloud URL).
-    Raises RuntimeError on conversion/download failure.
+    Raises RuntimeError on failure, including a clear error when
+    RENDEX_API_KEY is missing.
     """
+    api_key = os.environ.get("RENDEX_API_KEY")
+    if not api_key:
+        raise RuntimeError("RENDEX_API_KEY not set — cannot render images")
     try:
         resp = httpx.post(
-            HTML2PNG_API_URL,
-            headers={"Content-Type": "text/html"},
-            content=slide_html.encode("utf-8"),
+            RENDEX_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={"html": slide_html, "format": "png", "width": 1080, "height": 1350},
             timeout=timeout,
         )
         resp.raise_for_status()
-        data = resp.json()
     except Exception as exc:
-        raise RuntimeError(f"html2png.dev convert failed: {exc}") from exc
-    url = data.get("url") if isinstance(data, dict) else None
-    if not url:
-        raise RuntimeError(f"html2png.dev returned no url: {data!r}")
+        raise RuntimeError(f"Rendex render failed: {exc}") from exc
     try:
-        dl = httpx.get(url, timeout=timeout)
-        dl.raise_for_status()
-        png_file.write_bytes(dl.content)
+        png_file.write_bytes(resp.content)
     except Exception as exc:
-        raise RuntimeError(f"html2png.dev download failed for {url}: {exc}") from exc
-    return str(url)
+        raise RuntimeError(f"Rendex write failed for {png_file}: {exc}") from exc
 
 
 class _LangView:
@@ -270,25 +269,24 @@ def render_carousel(
     device_scale_factor: int = 2,
 ) -> List[Path]:
     """
-    Render a StudyReel Carousel into 1080x1350 PNG images via html2png.dev.
+    Render a StudyReel Carousel into 1080x1350 PNG images via Rendex.
 
-    The Jinja HTML for each slide is POSTed as-is to html2png.dev
-    (no API key, hosted Chromium). The returned hosted PNG URL is
-    downloaded to ``out_dir/slide_XX.png`` so the existing local-file
-    contract holds (ZIP export, publisher file-copy, tests), while the
-    hosted URL is used directly as the slide's cloud URL.
+    The Jinja HTML for each slide is POSTed as-is to Rendex
+    (hosted Chromium, API key via RENDEX_API_KEY). The binary PNG
+    response is written to ``out_dir/slide_XX.png`` so the existing
+    local-file contract holds (ZIP export, publisher file-copy, tests).
 
     Args:
         carousel: Carousel Pydantic model instance (canonical schema).
         out_dir: Directory where PNG slides will be saved.
-        device_scale_factor: Kept for API compatibility; html2png.dev
-            handles resolution via width/height query params. Ignored.
+        device_scale_factor: Kept for API compatibility; Rendex
+            handles resolution via width/height params. Ignored.
 
     Returns:
         List of Path objects pointing to the rendered 1080x1350 PNG files.
         The returned list is a subclass with an additional ``cloud_urls`` attribute
-        (list[str] parallel to the PNG list) containing hosted PNG URLs
-        (html2png.dev URL, or Cloudinary URL when configured).
+        (list[str] parallel to the PNG list) containing Cloudinary CDN URLs
+        (empty string if upload was skipped/failed).
         The URLs are also persisted to ``<out_dir>/cloud_urls.json``.
     """
     out_path = Path(out_dir)
@@ -317,9 +315,9 @@ def render_carousel(
         # File path for current slide
         png_file = out_path / f"slide_{idx:02d}.png"
 
-        # Render HTML to PNG via html2png.dev (hosted Chromium, no system libs).
-        # Templates are fed as-is; the hosted URL doubles as the cloud URL.
-        hosted_url = _render_html_to_png_via_html2png(slide_html, png_file)
+        # Render HTML to PNG via Rendex (hosted Chromium, no system libs).
+        # Templates are fed as-is; binary PNG is written to png_file.
+        _render_html_to_png_via_rendex(slide_html, png_file)
 
         if not png_file.exists() or png_file.stat().st_size == 0:
             raise RuntimeError(f"Failed to generate slide image at {png_file}")
@@ -336,15 +334,14 @@ def render_carousel(
 
         generated_pngs.append(png_file)
 
-        # Cloud URL: prefer Cloudinary when configured, else the html2png.dev
-        # hosted URL directly (no local-path-only fallback).
+        # Upload to Cloudinary (graceful fallback if not configured / upload fails)
         public_id = f"studyreel/{carousel.carousel_id}/slide_{idx:02d}"
         try:
             from app.storage.cloudinary_client import upload_image
             url = upload_image(png_file, public_id)
-            cloud_urls.append(url or hosted_url)
+            cloud_urls.append(url or "")
         except Exception:
-            cloud_urls.append(hosted_url)
+            cloud_urls.append("")
 
     # Persist cloud_urls alongside local renders for publisher consumption.
     # Treat renders/ as temp — local PNGs stay for now, but publisher will prefer CDN URLs.
