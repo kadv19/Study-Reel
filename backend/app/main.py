@@ -34,7 +34,15 @@ from app.api_users import router as users_router
 app = FastAPI(title="StudyReel Backend", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8100","http://localhost:8100","http://127.0.0.1:8501","http://localhost:8501","https://studyreel-instaclone.onrender.com","*"],
+    allow_origins=[
+        "https://studyreel-instaclone.onrender.com",
+        "http://localhost:8100",
+        "http://127.0.0.1:8100",
+        "capacitor://localhost",
+        "http://localhost",
+        "http://127.0.0.1:8501",
+        "http://localhost:8501",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
