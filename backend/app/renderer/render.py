@@ -279,7 +279,10 @@ def render_carousel(
 
         # Render HTML to PNG via WeasyPrint (pure Python, no browser binary)
         # base_url ensures relative assets resolve; HTML templates are self-contained
-        HTML(string=slide_html, base_url=str(TEMPLATES_DIR)).write_png(str(png_file))
+        HTML(string=slide_html, base_url=str(TEMPLATES_DIR)).write_image(
+            target=str(png_file),
+            resolution=150
+        )
 
         if not png_file.exists() or png_file.stat().st_size == 0:
             raise RuntimeError(f"Failed to generate slide image at {png_file}")
