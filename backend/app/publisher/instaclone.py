@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -14,12 +15,14 @@ from app.schemas import Carousel, PostMetadata
 
 CLONE_SLIDES_DIR = Path(__file__).resolve().parents[3] / "instaclone" / "data" / "slides"
 
+INSTACLONE_URL = os.environ.get("INSTACLONE_URL", "http://127.0.0.1:8100")
+
 
 class InstaClonePublisher:
     provider = "instaclone"
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8100"):
-        self.base = base_url.rstrip("/")
+    def __init__(self, base_url: str | None = None):
+        self.base = (base_url or os.environ.get("INSTACLONE_URL", INSTACLONE_URL)).rstrip("/")
 
     def publish(
         self, carousel: Carousel, metadata: PostMetadata, output_dir: Path
