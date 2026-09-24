@@ -147,6 +147,10 @@ def generate_module_topics(module_number: int) -> list[MicroTopic]:
 
     try:
         topics = generate_topics_for_module(module_text)
+    except HTTPException:
+        # Preserve explicit HTTP errors from the engine (e.g. 503 when Gemini
+        # is at capacity and no Ollama fallback is configured).
+        raise
     except Exception as exc:
         set_pipeline_state("FAILED", "generation", 0.0, f"Generation failed: {exc}")
         raise HTTPException(status_code=502, detail=f"Generation failed: {exc}") from exc
@@ -189,6 +193,10 @@ def generate_module_topics_post(
             slide_count=req.slide_count,
             resource_text=resource_text,
         )
+    except HTTPException:
+        # Preserve explicit HTTP errors from the engine (e.g. 503 when Gemini
+        # is at capacity and no Ollama fallback is configured).
+        raise
     except Exception as exc:
         set_pipeline_state("FAILED", "generation", 0.0, f"Generation failed: {exc}")
         raise HTTPException(status_code=502, detail=f"Generation failed: {exc}") from exc

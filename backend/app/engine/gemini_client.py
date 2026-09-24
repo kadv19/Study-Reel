@@ -6,7 +6,9 @@ Owned by P2, but the interface is the contract:
 
 import hashlib
 import json
+import logging
 import os
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +16,8 @@ from dotenv import load_dotenv
 from pydantic import TypeAdapter
 
 from app.schemas import MicroTopic
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")  # backend/.env
 
@@ -33,6 +37,86 @@ MODEL_FAILOVER = [
 # model is quota-exhausted (free tier is 20 req/day per model).
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+
+# Raised when Gemini is at capacity and no Ollama fallback exists on this
+# host (cloud deployments — Ollama runs on the user's PC, unreachable from
+# Render). Keep the message stable; the API layer surfaces it to the client.
+OLLAMA_ABSENT_MESSAGE = (
+    "AI generation temporarily unavailable — Gemini is at capacity and no "
+    "Ollama fallback is configured on this server. Please retry in a minute."
+)
+
+# Whole-chain retries: Gemini 503s are usually transient — a 3s retry often succeeds.
+GEMINI_CHAIN_MAX_ATTEMPTS = 3
+GEMINI_CHAIN_RETRY_DELAY_SECONDS = 3
+
+
+def _is_transient_or_quota_error(exc: Exception) -> bool:
+    """True for retry/failover-worthy Gemini errors: 503/UNAVAILABLE/quota/rate-limit/transient."""
+    s = str(exc).lower()
+    markers = (
+        "503",
+        "429",
+        "500",
+        "502",
+        "unavailable",
+        "resource_exhausted",
+        "quota",
+        "exhausted",
+        "overloaded",
+        "overload",
+        "capacity",
+        "rate limit",
+        "rate_limit",
+        "temporarily",
+        "try again",
+        "timeout",
+        "deadline",
+        "connection reset",
+        "tps",
+    )
+    return any(m in s for m in markers)
+
+
+def _short_status(exc: Exception) -> str:
+    """Compact status for INFO logs (e.g. '503', '429', 'UNAVAILABLE')."""
+    s = str(exc)
+    low = s.lower()
+    for code in ("503", "429", "500", "502", "400", "401", "403", "404"):
+        if code in s:
+            return code
+    if "unavailable" in low:
+        return "UNAVAILABLE"
+    if "resource_exhausted" in low:
+        return "RESOURCE_EXHAUSTED"
+    if "quota" in low:
+        return "quota-exhausted"
+    return s[:120].replace("\n", " ")
+
+
+def _is_ollama_absent() -> bool:
+    """True when no usable Ollama fallback exists on this server.
+
+    - OLLAMA_BASE_URL not set / empty → absent (cloud default).
+    - OLLAMA_BASE_URL is localhost/127.0.0.1/::1 → absent on cloud hosts
+      (Ollama runs on the user's PC, unreachable from Render).
+    A non-localhost URL means an explicitly configured remote Ollama host.
+    """
+    raw = os.getenv("OLLAMA_BASE_URL")
+    if not raw or not raw.strip():
+        return True
+    lowered = raw.lower()
+    return "localhost" in lowered or "127.0.0.1" in lowered or "::1" in lowered
+
+
+def _raise_no_ollama_fallback(last_exc: Exception | None = None) -> None:
+    """Raise a clear HTTP 503 instead of a confusing Gemini/Ollama error."""
+    try:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail=OLLAMA_ABSENT_MESSAGE) from last_exc
+    except ImportError:
+        raise RuntimeError(f"HTTP 503: {OLLAMA_ABSENT_MESSAGE} (last error: {last_exc})") from last_exc
 
 SYSTEM_PROMPT = """You are a senior CSE professor creating exam-focused micro-lessons for engineering students.
 
@@ -151,6 +235,10 @@ class GeminiClient:
                 self._to_cache(cache_key, [t.model_dump() for t in topics])
                 return topics
             except Exception as exc:  # network, JSON, or validation failure
+                # Preserve explicit HTTP 503 (Gemini at capacity, no Ollama fallback):
+                # do not wrap or repair-loop it — surface it directly.
+                if getattr(exc, "status_code", None) == 503:
+                    raise
                 last_exc = exc
                 # If the model's JSON failed Pydantic validation, give it the
                 # error back and ask for a corrected response. This is the
@@ -166,12 +254,19 @@ class GeminiClient:
                             self._to_cache(cache_key, [t.model_dump() for t in topics])
                             return topics
                         except Exception as exc2:
+                            if getattr(exc2, "status_code", None) == 503:
+                                raise
                             last_exc = exc2
         raise RuntimeError(f"Gemini generation failed after retries+repairs: {last_exc}")
 
     def _generate(self, module_text: str, last_error: Optional[str], system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
-        """One raw Gemini call; returns the parsed JSON payload. Fails over
-        across MODEL_FAILOVER models when the active model is quota-exhausted."""
+        """One raw Gemini call; returns the parsed JSON payload.
+
+        Fails over across MODEL_FAILOVER models when a model is
+        quota-exhausted / overloaded (429/503/UNAVAILABLE). The whole
+        5-model chain is retried up to GEMINI_CHAIN_MAX_ATTEMPTS times
+        with a short sleep — Gemini 503s are usually transient.
+        """
         contents = module_text
         if last_error:
             contents = (
@@ -182,25 +277,64 @@ class GeminiClient:
                 f"conforming to the schema."
             )
         start_idx = MODEL_FAILOVER.index(self.model) if self.model in MODEL_FAILOVER else 0
+        models_to_try = MODEL_FAILOVER[start_idx:]
+        total_models = len(MODEL_FAILOVER)
         last_exc: Exception | None = None
-        for model in MODEL_FAILOVER[start_idx:]:
-            try:
-                resp = self.client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config={
-                        "system_instruction": system_prompt,
-                        "temperature": 0.4,
-                        "response_mime_type": "application/json",
-                    },
-                )
-                self.model = model  # pin the working model for subsequent calls
-                return json.loads(resp.text)
-            except Exception as exc:
-                last_exc = exc
-                if "429" not in str(exc) and "RESOURCE_EXHAUSTED" not in str(exc):
-                    raise  # non-quota errors are not failover-worthy
-        return self._generate_ollama(contents, system_prompt)
+        try:
+            for chain_attempt in range(1, GEMINI_CHAIN_MAX_ATTEMPTS + 1):
+                for model in models_to_try:
+                    try:
+                        model_num = MODEL_FAILOVER.index(model) + 1 if model in MODEL_FAILOVER else "?"
+                    except ValueError:
+                        model_num = "?"
+                    try:
+                        resp = self.client.models.generate_content(
+                            model=model,
+                            contents=contents,
+                            config={
+                                "system_instruction": system_prompt,
+                                "temperature": 0.4,
+                                "response_mime_type": "application/json",
+                            },
+                        )
+                        logger.info(
+                            f"Gemini attempt {chain_attempt}/{GEMINI_CHAIN_MAX_ATTEMPTS}, "
+                            f"model {model_num}/{total_models}: {model} → 200 OK"
+                        )
+                        self.model = model  # pin the working model for subsequent calls
+                        return json.loads(resp.text)
+                    except Exception as exc:
+                        status = _short_status(exc)
+                        logger.info(
+                            f"Gemini attempt {chain_attempt}/{GEMINI_CHAIN_MAX_ATTEMPTS}, "
+                            f"model {model_num}/{total_models}: {model} → {status}"
+                        )
+                        if not _is_transient_or_quota_error(exc):
+                            raise  # non-transient errors are not failover-worthy
+                        last_exc = exc
+                        continue
+                if chain_attempt < GEMINI_CHAIN_MAX_ATTEMPTS:
+                    logger.info(
+                        f"Gemini chain attempt {chain_attempt}/{GEMINI_CHAIN_MAX_ATTEMPTS} "
+                        f"exhausted, retrying in {GEMINI_CHAIN_RETRY_DELAY_SECONDS}s..."
+                    )
+                    time.sleep(GEMINI_CHAIN_RETRY_DELAY_SECONDS)
+        except Exception:
+            # Non-transient Gemini errors propagate immediately — no Ollama fallback.
+            raise
+        # All Gemini models failed with 503/UNAVAILABLE/quota errors across all chain retries.
+        # Explicit Ollama fallback path: on cloud hosts Ollama doesn't exist
+        # (it runs on the user's PC, unreachable from Render), so a localhost
+        # fallback would fail silently with a confusing error. Try Ollama when
+        # configured, but surface a clear HTTP 503 when it is absent.
+        try:
+            return self._generate_ollama(contents, system_prompt)
+        except Exception as ollama_exc:
+            if _is_ollama_absent():
+                _raise_no_ollama_fallback(last_exc or ollama_exc)
+            raise RuntimeError(
+                f"Gemini quota exhausted and Ollama fallback failed: {ollama_exc}"
+            ) from ollama_exc
 
     def _generate_ollama(self, contents: str, system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
         """Fallback to a local Ollama model when Gemini quota is exhausted."""
@@ -210,6 +344,10 @@ class GeminiClient:
             raise RuntimeError(
                 "All Gemini models quota-exhausted and `requests` unavailable for Ollama fallback"
             ) from exc
+
+        # Read env at call time so cloud vs local config is always fresh.
+        ollama_base = os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL)
+        ollama_model = os.getenv("OLLAMA_MODEL", OLLAMA_MODEL)
 
         # include diagram in Ollama schema when prompt asks for it
         has_diagram = "diagram" in system_prompt.lower()
@@ -224,9 +362,9 @@ class GeminiClient:
 
         try:
             resp = requests.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{ollama_base}/api/chat",
                 json={
-                    "model": OLLAMA_MODEL,
+                    "model": ollama_model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -239,7 +377,7 @@ class GeminiClient:
             )
             resp.raise_for_status()
             payload = resp.json()
-            self.model = f"ollama:{OLLAMA_MODEL}"  # pin for diagnostics
+            self.model = f"ollama:{ollama_model}"  # pin for diagnostics
             return json.loads(payload["message"]["content"])["topics"]
         except Exception as exc:
             raise RuntimeError(
