@@ -311,7 +311,7 @@ async function selectShelf(shelfId){
   activeShelf = shelves.find(s=>s.shelf_id===shelfId);
   // also check scoped? if not found, search all shelves
   if(!activeShelf) activeShelf = shelves.find(s=> String(s.shelf_id)===String(shelfId));
-  if(shelfNameEl) shelfNameEl.textContent = activeShelf ? `${activeShelf.label} — ${activeShelf.module_name || 'Module'}` : shelfId;
+  if(shelfNameEl) shelfNameEl.textContent = activeShelf ? (activeShelf.module_name || activeShelf.label) : shelfId;
   deckIndex = 0;
   flipped = false;
   if(flipInner) flipInner.classList.remove('flipped');
