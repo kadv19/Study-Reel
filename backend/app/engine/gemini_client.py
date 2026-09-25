@@ -38,6 +38,34 @@ MODEL_FAILOVER = [
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
+# ngrok free tier intercepts requests without this header and returns an
+# HTML warning page instead of forwarding to Ollama. Every Ollama request
+# must include it (works harmlessly for direct/local Ollama too).
+OLLAMA_HEADERS = {"ngrok-skip-browser-warning": "69420"}
+
+
+def _ollama_headers() -> dict[str, str]:
+    """Headers sent on every Ollama request (ngrok free-tier bypass)."""
+    return dict(OLLAMA_HEADERS)
+
+
+def _log_ollama_startup_config() -> None:
+    """Log Ollama fallback config at startup so Render logs show it clearly."""
+    raw = os.getenv("OLLAMA_BASE_URL")
+    is_set = bool(raw and raw.strip())
+    header_configured = bool(OLLAMA_HEADERS.get("ngrok-skip-browser-warning"))
+    logger.info(
+        "[ollama] startup config: OLLAMA_BASE_URL set=%s value=%s, "
+        "ngrok-skip-browser-warning header configured=%s value=%s",
+        is_set,
+        raw if is_set else OLLAMA_BASE_URL,
+        header_configured,
+        OLLAMA_HEADERS.get("ngrok-skip-browser-warning"),
+    )
+
+
+_log_ollama_startup_config()
+
 # Raised when Gemini is at capacity and no Ollama fallback exists on this
 # host (cloud deployments — Ollama runs on the user's PC, unreachable from
 # Render). Keep the message stable; the API layer surfaces it to the client.
@@ -337,17 +365,22 @@ class GeminiClient:
             ) from ollama_exc
 
     def _generate_ollama(self, contents: str, system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
-        """Fallback to a local Ollama model when Gemini quota is exhausted."""
-        try:
-            import requests
-        except ImportError as exc:
-            raise RuntimeError(
-                "All Gemini models quota-exhausted and `requests` unavailable for Ollama fallback"
-            ) from exc
+        """Fallback to a local Ollama model when Gemini quota is exhausted.
 
+        OLLAMA_BASE_URL may point at an ngrok free-tier URL, which returns an
+        HTML warning page unless every request carries
+        ``ngrok-skip-browser-warning: 69420``. We therefore:
+
+        1. Prefer ``ollama.Client(host=..., headers=...)`` (same for
+           ``ollama.AsyncClient``) when the installed ``ollama`` package
+           supports the ``headers=`` constructor kwarg (it does since 0.3+ —
+           headers are forwarded via httpx).
+        2. Otherwise fall back to ``httpx`` directly, sending the same header.
+        """
         # Read env at call time so cloud vs local config is always fresh.
         ollama_base = os.getenv("OLLAMA_BASE_URL", OLLAMA_BASE_URL)
         ollama_model = os.getenv("OLLAMA_MODEL", OLLAMA_MODEL)
+        headers = _ollama_headers()
 
         # include diagram in Ollama schema when prompt asks for it
         has_diagram = "diagram" in system_prompt.lower()
@@ -359,24 +392,86 @@ class GeminiClient:
             f"(string, max 30 chars), body (string, max 140 chars), code_block "
             f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null){diagram_keys}."
         )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        # Path 1: ollama package with headers= support (preferred when installed).
+        try:
+            import inspect
+
+            import ollama as ollama_pkg
+
+            try:
+                sig = inspect.signature(ollama_pkg.Client.__init__)
+                supports_headers = "headers" in sig.parameters
+            except (TypeError, ValueError):
+                supports_headers = True  # assume modern client; TypeError only if exotic
+            if supports_headers:
+                logger.info("[ollama] using ollama.Client with ngrok-skip-browser-warning header")
+                client = ollama_pkg.Client(host=ollama_base, headers=headers)
+                resp = client.chat(
+                    model=ollama_model,
+                    messages=messages,
+                    format="json",
+                    options={"temperature": 0.4},
+                )
+                # ollama-python returns ChatResponse (attr access) or dict-like.
+                content: Optional[str] = None
+                message = getattr(resp, "message", None)
+                if message is not None:
+                    content = getattr(message, "content", None)
+                    if content is None and isinstance(message, dict):
+                        content = message.get("content")
+                elif isinstance(resp, dict):
+                    msg = resp.get("message", {})
+                    content = msg.get("content") if isinstance(msg, dict) else None
+                if not content:
+                    raise RuntimeError(f"Ollama returned no message content: {resp!r:.200}")
+                self.model = f"ollama:{ollama_model}"  # pin for diagnostics
+                return json.loads(content)["topics"]
+            else:
+                logger.info("[ollama] installed ollama package lacks headers= support, using httpx fallback")
+        except ImportError:
+            # ollama package not installed — expected in this repo (httpx fallback below).
+            logger.info("[ollama] ollama package not installed, using httpx fallback with ngrok-skip-browser-warning header")
+        except Exception as exc:
+            # If the ollama-client path itself failed with an HTML/ngrok-looking
+            # error, surface it clearly; otherwise re-raise via the httpx fallback?
+            # Prefer to try httpx before giving up, since it sends the same header.
+            logger.info(f"[ollama] ollama.Client path failed ({exc:.150}), trying httpx fallback")
+
+        # Path 2: httpx directly (pinned in requirements) with the same header.
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError(
+                "All Gemini models quota-exhausted and neither `ollama` nor `httpx` is available for Ollama fallback"
+            ) from exc
 
         try:
-            resp = requests.post(
-                f"{ollama_base}/api/chat",
-                json={
-                    "model": ollama_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": False,
-                    "format": "json",
-                    "options": {"temperature": 0.4},
-                },
-                timeout=300,
-            )
-            resp.raise_for_status()
-            payload = resp.json()
+            url = f"{ollama_base.rstrip('/')}/api/chat"
+            with httpx.Client(headers=headers, timeout=300.0) as http_client:
+                resp = http_client.post(
+                    url,
+                    json={
+                        "model": ollama_model,
+                        "messages": messages,
+                        "stream": False,
+                        "format": "json",
+                        "options": {"temperature": 0.4},
+                    },
+                )
+                resp.raise_for_status()
+                # Detect ngrok warning-page HTML slipping through (header missing/blocked).
+                content_type = resp.headers.get("content-type", "")
+                if "text/html" in content_type.lower():
+                    raise RuntimeError(
+                        "Ollama fallback got an HTML page instead of JSON — "
+                        "likely ngrok browser-warning interception (ngrok-skip-browser-warning header missing?)"
+                    )
+                payload = resp.json()
             self.model = f"ollama:{ollama_model}"  # pin for diagnostics
             return json.loads(payload["message"]["content"])["topics"]
         except Exception as exc:
