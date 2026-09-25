@@ -13,9 +13,24 @@ Endpoint:
     -> 500 text/plain on failure
 """
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from playwright.sync_api import sync_playwright
 
 app = FastAPI(title="StudyReel Render Service")
+
+
+def _do_render(html: str) -> bytes:
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            page = b.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=1)
+            page.set_content(html, wait_until="networkidle")
+            page.wait_for_timeout(500)
+            png = page.screenshot(type="png")
+            return png
+        finally:
+            b.close()
 
 
 @app.post("/render")
@@ -37,22 +52,13 @@ async def render(request: Request) -> Response:
         msg = f"body is not valid utf-8 html: {exc}"
         print(f"[render-service] 500: {msg}", flush=True)
         return Response(content=msg, media_type="text/plain", status_code=500)
+    if not html.strip():
+        msg = "empty HTML body"
+        print(f"[render-service] 500: {msg}", flush=True)
+        return Response(content=msg, media_type="text/plain", status_code=500)
 
     try:
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            try:
-                page = browser.new_page(
-                    viewport={"width": 1080, "height": 1350},
-                    device_scale_factor=1,
-                )
-                page.set_content(html, wait_until="networkidle")
-                page.wait_for_timeout(500)
-                png_bytes = page.screenshot(full_page=False, type="png")
-            finally:
-                browser.close()
+        png_bytes = await run_in_threadpool(_do_render, html)
         print(f"[render-service] 200: rendered {len(png_bytes)} bytes PNG", flush=True)
         return Response(content=png_bytes, media_type="image/png")
     except Exception as exc:
