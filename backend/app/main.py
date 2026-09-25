@@ -68,7 +68,7 @@ class CarouselRenderRequest(BaseModel):
 class TopicsGenerateRequest(BaseModel):
     """Tailoring options for topic generation — dropdown-driven upload flow."""
 
-    depth_format: Literal["detailed", "short", "diagram", "both"] = "detailed"
+    depth_format: Literal["detailed", "short", "diagram", "both", "auto"] = "detailed"
     tone: Literal["eli5", "professional", "default"] = "default"
     slide_count: int = Field(10, ge=3, le=20)
 
