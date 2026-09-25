@@ -29,37 +29,35 @@ BIN_DIR = RENDERER_DIR / "bin"
 
 DEFAULT_AUTHOR = "StudyReel"
 
-# Rendex — hosted HTML→PNG, no system libs. Free tier covers render workloads.
-# POSTs raw HTML as JSON, returns raw binary PNG data.
-RENDEX_API_URL = "https://api.rendex.dev/v1/screenshot"
+# Local Playwright render service (replaces Rendex, whose free tier is exhausted).
+# Runs on a separate machine, exposed via ngrok. Configure via RENDER_SERVICE_URL.
+# POSTs raw HTML (Content-Type: text/html) to /render, expects raw PNG bytes back.
+def _render_service_url() -> str:
+    return os.environ.get("RENDER_SERVICE_URL", "http://127.0.0.1:11435")
 
 
-def _render_html_to_png_via_rendex(slide_html: str, png_file: Path, timeout: float = 90.0) -> None:
-    """POST raw HTML to Rendex, write the binary PNG response to png_file.
+def _render_html_to_png_via_service(slide_html: str, png_file: Path, timeout: float = 90.0) -> None:
+    """POST raw HTML to the local render service, write PNG bytes to png_file.
 
-    Raises RuntimeError on failure, including a clear error when
-    RENDEX_API_KEY is missing.
+    Raises RuntimeError on failure.
     """
-    api_key = os.environ.get("RENDEX_API_KEY")
-    if not api_key:
-        raise RuntimeError("RENDEX_API_KEY not set — cannot render images")
+    base_url = _render_service_url()
+    url = f"{base_url.rstrip('/')}/render"
+    print(f"Rendering via RENDER_SERVICE_URL={base_url}", flush=True)
     try:
         resp = httpx.post(
-            RENDEX_API_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={"html": slide_html, "format": "png", "width": 1080, "height": 1350},
+            url,
+            content=slide_html.encode("utf-8"),
+            headers={"Content-Type": "text/html"},
             timeout=timeout,
         )
         resp.raise_for_status()
     except Exception as exc:
-        raise RuntimeError(f"Rendex render failed: {exc}") from exc
+        raise RuntimeError(f"Render service render failed: {exc}") from exc
     try:
         png_file.write_bytes(resp.content)
     except Exception as exc:
-        raise RuntimeError(f"Rendex write failed for {png_file}: {exc}") from exc
+        raise RuntimeError(f"Render service write failed for {png_file}: {exc}") from exc
 
 
 class _LangView:
@@ -269,18 +267,19 @@ def render_carousel(
     device_scale_factor: int = 2,
 ) -> List[Path]:
     """
-    Render a StudyReel Carousel into 1080x1350 PNG images via Rendex.
+    Render a StudyReel Carousel into 1080x1350 PNG images via the local render service.
 
-    The Jinja HTML for each slide is POSTed as-is to Rendex
-    (hosted Chromium, API key via RENDEX_API_KEY). The binary PNG
-    response is written to ``out_dir/slide_XX.png`` so the existing
-    local-file contract holds (ZIP export, publisher file-copy, tests).
+    The Jinja HTML for each slide is POSTed as raw HTML (Content-Type: text/html)
+    to ``<RENDER_SERVICE_URL>/render`` (local Playwright Chromium, see
+    repo-root render_service.py). The binary PNG response is written to
+    ``out_dir/slide_XX.png`` so the existing local-file contract holds
+    (ZIP export, publisher file-copy, tests).
 
     Args:
         carousel: Carousel Pydantic model instance (canonical schema).
         out_dir: Directory where PNG slides will be saved.
-        device_scale_factor: Kept for API compatibility; Rendex
-            handles resolution via width/height params. Ignored.
+        device_scale_factor: Kept for API compatibility; the render service
+            renders at 1080x1350 viewport with device_scale_factor=1. Ignored.
 
     Returns:
         List of Path objects pointing to the rendered 1080x1350 PNG files.
@@ -289,6 +288,7 @@ def render_carousel(
         (empty string if upload was skipped/failed).
         The URLs are also persisted to ``<out_dir>/cloud_urls.json``.
     """
+    print(f"Rendering via RENDER_SERVICE_URL={_render_service_url()}", flush=True)
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -315,9 +315,9 @@ def render_carousel(
         # File path for current slide
         png_file = out_path / f"slide_{idx:02d}.png"
 
-        # Render HTML to PNG via Rendex (hosted Chromium, no system libs).
+        # Render HTML to PNG via local render service (Playwright Chromium).
         # Templates are fed as-is; binary PNG is written to png_file.
-        _render_html_to_png_via_rendex(slide_html, png_file)
+        _render_html_to_png_via_service(slide_html, png_file)
 
         if not png_file.exists() or png_file.stat().st_size == 0:
             raise RuntimeError(f"Failed to generate slide image at {png_file}")
