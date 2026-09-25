@@ -29,6 +29,25 @@ BIN_DIR = RENDERER_DIR / "bin"
 
 DEFAULT_AUTHOR = "StudyReel"
 
+
+def _current_rss_mb() -> float:
+    """Current process RSS in MB (-1.0 if undeterminable). For OOM diagnosis."""
+    try:
+        with open("/proc/self/status") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return float(line.split()[1]) / 1024.0
+    except Exception:
+        pass
+    try:
+        import resource
+
+        # Linux ru_maxrss is KB; macOS is bytes.
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        return rss / 1024.0 if rss < 10**9 else rss / (1024.0 * 1024.0)
+    except Exception:
+        return -1.0
+
 # Local Playwright render service (replaces Rendex, whose free tier is exhausted).
 # Runs on a separate machine, exposed via ngrok. Configure via RENDER_SERVICE_URL.
 # POSTs raw HTML (Content-Type: text/html) to /render, expects raw PNG bytes back.
@@ -289,6 +308,7 @@ def render_carousel(
         The URLs are also persisted to ``<out_dir>/cloud_urls.json``.
     """
     print(f"Rendering via RENDER_SERVICE_URL={_render_service_url()}", flush=True)
+    print(f"Rendering carousel: {len(carousel.slides)} slides, mem={_current_rss_mb():.1f} MB", flush=True)
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -317,7 +337,11 @@ def render_carousel(
 
         # Render HTML to PNG via local render service (Playwright Chromium).
         # Templates are fed as-is; binary PNG is written to png_file.
+        # Sequential per-slide streaming: only one slide's HTML/PNG bytes are
+        # held in memory at a time (resp bytes are freed on each loop iteration;
+        # local PNGs stay on disk for ZIP export / publisher, not in RAM).
         _render_html_to_png_via_service(slide_html, png_file)
+        del slide_html
 
         if not png_file.exists() or png_file.stat().st_size == 0:
             raise RuntimeError(f"Failed to generate slide image at {png_file}")
