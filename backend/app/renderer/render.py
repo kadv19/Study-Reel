@@ -51,7 +51,7 @@ def _current_rss_mb() -> float:
 # Browserless hosted Chromium over CDP (primary path). Configure via BROWSERLESS_TOKEN.
 def _browserless_ws_url() -> str:
     token = os.environ.get("BROWSERLESS_TOKEN", "")
-    return f"wss://production-sfo.browserless.io?token={token}"
+    return f"wss://production-sfo.browserless.io?token={token}&timeout=120000"
 
 
 def _render_html_to_png_via_browser(page, slide_html: str, png_file: Path) -> None:
