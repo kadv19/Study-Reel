@@ -24,6 +24,7 @@
   "homepage": "https://github.com/kadv19/Study-Reel#readme",
   "dependencies": {
     "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2"
   }

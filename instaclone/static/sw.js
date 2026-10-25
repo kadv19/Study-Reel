@@ -1,7 +1,7 @@
 // PWA service worker — cache deck/cabinet + API stale-while-revalidate, slides cache-first
-// v2 bumped to bust cache after diagram+clipping fixes — deck.html will also unregister on load to prevent stale phone cache
-const CACHE = 'studyreel-v2';
-const ASSETS = ['/deck','/cabinet','/static/deck.js','/static/cabinet.js','/static/style.css'];
+// v3 bumped for the premium 3-level cabinet redesign — pages also unregister on load to prevent stale phone cache
+const CACHE = 'studyreel-v3';
+const ASSETS = ['/deck','/cabinet','/static/back-nav.js','/static/deck.js','/static/cabinet.js','/static/cabinet.css','/static/style.css'];
 self.addEventListener('install', e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS).catch(()=>{})));
   self.skipWaiting();
@@ -33,7 +33,7 @@ self.addEventListener('fetch', e=>{
     return;
   }
   // critical app shell: network-first to prevent stale phone cache masking fixes
-  const critical = ['/deck','/auth','/onboarding','/cabinet','/upload','/static/deck.js','/static/auth.js','/static/cabinet.js'];
+  const critical = ['/deck','/auth','/onboarding','/cabinet','/upload','/static/back-nav.js','/static/deck.js','/static/auth.js','/static/cabinet.js','/static/cabinet.css'];
   if(critical.some(p=> url.pathname===p || url.pathname.startsWith(p))){
     e.respondWith(fetch(e.request).then(res=>{
       const clone=res.clone();

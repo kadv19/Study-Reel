@@ -191,3 +191,18 @@ generateBtn.addEventListener('click', async ()=>{
     location.href='/deck';
   }, 1800);
 });
+
+// Hardware/browser back from a linked page returns to the Deck.
+window.StudyReelBack = function(canGoBack){
+  let fromDeck = false;
+  try{
+    const ref = document.referrer ? new URL(document.referrer) : null;
+    fromDeck = !!ref && ref.origin===location.origin && (ref.pathname==='/deck' || ref.pathname==='/' || ref.pathname==='/feed');
+  }catch(e){}
+  if(canGoBack && fromDeck){
+    history.back();
+  } else {
+    location.replace('/deck');
+  }
+  return true;
+};

@@ -12,6 +12,8 @@ let deck = null;
 let deckIndex = 0;
 let flipped = false;
 let replayMode = false;
+let deepLinkHandled = false;
+let historyDeckRestored = false;
 
 const libraryView = document.getElementById('libraryView');
 const bookView = document.getElementById('bookView');
@@ -86,7 +88,16 @@ function handleLogout(){
 }
 window.handleLogout = handleLogout;
 
-function showLibrary(){
+function showLibrary(opts){
+  opts = opts || {};
+  // Hardware/browser back from the card deck: pop the deck history entry first.
+  if(!opts.fromPop && history.state && history.state.srView==='deck'){
+    history.back();
+    return;
+  }
+  if(!opts.fromPop && (!history.state || history.state.srView!=='library')){
+    history.replaceState({srView:'library'}, '');
+  }
   replayMode = false;
   // reset trays/dragTip visibility for next book open (will be shown after shelf select)
   if(libraryView) libraryView.style.display='block';
@@ -97,9 +108,19 @@ function showLibrary(){
 }
 window.showLibrary = showLibrary;
 
-function openBook(bookId){
+function openBook(bookId, opts){
+  opts = opts || {};
   const b = books.find(x=> String(x.book_id)===String(bookId) || String(x.syllabus_id)===String(bookId));
-  if(!b) return;
+  if(!b){
+    if(opts.fromPop) showLibrary({fromPop:true});
+    return;
+  }
+  const resolvedBookId = b.book_id || b.syllabus_id;
+  if(!opts.fromPop){
+    history.pushState({srView:'deck', bookId: resolvedBookId, shelfId: opts.shelfId || null}, '');
+  } else if(history.state && history.state.srView==='deck'){
+    history.replaceState({...history.state, bookId: resolvedBookId}, '');
+  }
   activeBook = b;
   replayMode = false;
   if(bookTitleEl) bookTitleEl.textContent = b.label;
@@ -109,7 +130,8 @@ function openBook(bookId){
   const scoped = shelves.filter(s=> String(s.syllabus_id)===String(b.syllabus_id) || String(s.syllabus_id)===String(b.book_id));
   renderShelfRow(scoped);
   if(scoped.length){
-    selectShelf(scoped[0].shelf_id);
+    const preferred = opts.shelfId && scoped.find(s=> String(s.shelf_id)===String(opts.shelfId));
+    selectShelf(preferred ? preferred.shelf_id : scoped[0].shelf_id, {fromPop: opts.fromPop});
   } else {
     shelfRow.innerHTML = '<span style="font-size:11px;color:var(--muted)">No shelves in this book — render a module first</span>';
     shelfNameEl.textContent = b.label + ' — no shelves';
@@ -288,15 +310,22 @@ async function loadLibrary(){
     shelves = sRes.ok ? JSON.parse(sText) : [];
     // if library endpoint fails, fallback derive books from shelves
     renderLibrary();
-    // if there's a book param, auto-open
+    // Restore the deck view when returning from an external page (same history entry).
+    if(!historyDeckRestored && history.state && history.state.srView==='deck'){
+      historyDeckRestored = true;
+      openBook(history.state.bookId, {fromPop:true, shelfId:history.state.shelfId});
+      return;
+    }
+    // if there's a book param, auto-open once (do not reopen after returning to library)
     const params = new URLSearchParams(location.search);
     const wantBook = params.get('book') || params.get('syllabus') || params.get('shelf');
-    if(wantBook){
+    if(wantBook && !deepLinkHandled){
+      deepLinkHandled = true;
       // try to find matching book or shelf
       const mBook = books.find(b=> String(b.book_id)===wantBook || String(b.syllabus_id)===wantBook);
       if(mBook){ openBook(mBook.book_id); return; }
       const mShelf = shelves.find(s=> String(s.shelf_id)===wantBook);
-      if(mShelf){ openBook(mShelf.syllabus_id); setTimeout(()=> selectShelf(mShelf.shelf_id), 200); return; }
+      if(mShelf){ openBook(mShelf.syllabus_id, {shelfId:mShelf.shelf_id}); return; }
     }
   }catch(e){
     console.error('loadLibrary', e);
@@ -304,13 +333,17 @@ async function loadLibrary(){
   }
 }
 
-async function selectShelf(shelfId){
+async function selectShelf(shelfId, opts){
+  opts = opts || {};
   // leaving shelf resets replayMode
   replayMode = false;
   document.querySelectorAll('.spine').forEach(el=>el.classList.toggle('active', el.dataset.shelf===shelfId));
   activeShelf = shelves.find(s=>s.shelf_id===shelfId);
   // also check scoped? if not found, search all shelves
   if(!activeShelf) activeShelf = shelves.find(s=> String(s.shelf_id)===String(shelfId));
+  if(!opts.fromPop && history.state && history.state.srView==='deck'){
+    history.replaceState({...history.state, shelfId: shelfId}, '');
+  }
   if(shelfNameEl) shelfNameEl.textContent = activeShelf ? (activeShelf.module_name || activeShelf.label) : shelfId;
   deckIndex = 0;
   flipped = false;
@@ -633,4 +666,39 @@ window.toggleTheme = toggleTheme;
 window.flipCard=flipCard;
 window.file=file;
 
+function isDeckOpen(){
+  return !!(bookView && bookView.style.display!=='none');
+}
+
+// Android hardware back (via Capacitor App plugin) and browser back.
+window.StudyReelBack = function(canGoBack){
+  if(isDeckOpen()){
+    if(canGoBack && history.state && history.state.srView==='deck'){
+      history.back();
+    } else {
+      if(history.state && history.state.srView==='deck'){
+        history.replaceState({srView:'library'}, '');
+      }
+      showLibrary({fromPop:true});
+    }
+    return true;
+  }
+  // Root library view: leave the app rather than walking back into auth/onboarding.
+  if(window.StudyReelExit && window.StudyReelExit()) return true;
+  if(canGoBack) history.back();
+  return true;
+};
+
+window.addEventListener('popstate', (e)=>{
+  const st = e.state;
+  if(st && st.srView==='deck'){
+    openBook(st.bookId, {fromPop:true, shelfId:st.shelfId});
+  } else {
+    showLibrary({fromPop:true});
+  }
+});
+
+if(!history.state || !history.state.srView){
+  history.replaceState({srView:'library'}, '');
+}
 loadLibrary();

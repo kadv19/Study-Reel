@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.db.database import (
@@ -292,6 +292,25 @@ def export_carousel(carousel_id: int) -> StreamingResponse:
         buf,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/v1/carousels/{carousel_id}/slides/{slide_index}.png")
+def get_carousel_slide_png(carousel_id: int, slide_index: int) -> FileResponse:
+    """Serve one rendered slide as a PNG so the cabinet can show real previews."""
+    record = get_carousel(carousel_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Carousel {carousel_id} not found")
+    if not record.get("output_dir"):
+        raise HTTPException(status_code=404, detail=f"Rendered slides missing for carousel {carousel_id}")
+    out_dir = Path(record["output_dir"])
+    png = out_dir / f"slide_{slide_index + 1:02d}.png"
+    if not png.is_file():
+        raise HTTPException(status_code=404, detail=f"Slide {slide_index} not found for carousel {carousel_id}")
+    return FileResponse(
+        png,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 

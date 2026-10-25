@@ -250,6 +250,13 @@ async function loadFeed(force=false) {
   } catch (err) { console.error('Error loading feed:', err); }
 }
 
+window.StudyReelBack = function(canGoBack){
+  // Feed is a root view: leave the app instead of returning to auth.
+  if(window.StudyReelExit && window.StudyReelExit()) return true;
+  if(canGoBack) history.back();
+  return true;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   loadFeed();
   setInterval(loadFeed, 10000);

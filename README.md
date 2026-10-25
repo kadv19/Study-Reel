@@ -33,7 +33,7 @@ Test: `cd backend && .venv/bin/python -m pytest tests/ -v` → 64 green (53+7+4)
 
 - **Syllabus → cards:** `pdfplumber` boundary + noise clean → `gemini-3.6-flash` (failover 5 models + Ollama `qwen2.5:7b`) generates `MicroTopic` (header ≤30, body ≤140, code ≤22×62, back_header 30/back_body 140/exam_weight low/med/high) → HITL edit → Playwright renders PNGs.
 - **Deck:** book-spine shelves (fill = mastered/total), stack of 3 cards peek, 3D flip front/back, drag left=Review amber, down=Catalog cyan, right=Got it green (display `Got it`, enum `mastered`). `100dvh`, 44px targets, haptics.
-- **Cabinet:** 3 drawers Review/Catalog/Got it (accordion), per-user `user_card_states` (anon → pseudo `name/college/email` via `POST /api/v1/users`, 3-dismiss onboarding).
+- **Cabinet:** 3-level drill-down — Books → Shelves → Cards — with progress rings, slide previews, iOS-style horizontal transitions, and a flip-card detail modal; per-user `user_card_states` (anon → pseudo `name/college/email` via `POST /api/v1/users`, 3-dismiss onboarding).
 - **Feed:** legacy global trending `likes*0.7+views*0.15-hours*0.08` kept at `/feed_legacy`, Deck is primary.
 - **Publisher seam:** `PUBLISHER=instaclone` (port 8100 copy) today, `instagram` tomorrow via env only.
 
