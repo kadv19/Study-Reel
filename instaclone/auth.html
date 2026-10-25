@@ -79,8 +79,10 @@ try{ if(localStorage.getItem('sr_session_token') && localStorage.getItem('sr_use
     display:flex; align-items:flex-start; justify-content:space-between; padding:12px 14px;
     transition: transform .5s cubic-bezier(.4,.1,.2,1), opacity .4s;
     z-index:3;
+    touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
   .peekcard:hover{transform:translateX(-50%) translateY(-6px);}
+  .peekcard.dragging{transition:none; cursor:grabbing;}
   .peekcard .serial{font-family:'Fira Code',monospace; font-size:10px; color:var(--muted-ink);}
   .peekcard .pulltag{font-family:'Fraunces',serif; font-weight:600; font-size:12.5px; color:var(--ink); display:flex; align-items:center; gap:5px;}
   .peekcard .pulltag .ring{width:14px; height:14px; border:2.5px solid var(--muted-ink); border-radius:50%;}
@@ -193,7 +195,7 @@ try{ if(localStorage.getItem('sr_session_token') && localStorage.getItem('sr_use
 
       <div class="pocket-area">
         <div class="pocket"><div class="stitch"></div></div>
-        <div class="peekcard" onclick="pullCard()">
+        <div class="peekcard" id="peekcard" role="button" tabindex="0" aria-label="Pull your card">
           <span class="serial mono">No. 0427</span>
           <span class="pulltag"><span class="ring"></span>Pull</span>
         </div>
@@ -302,6 +304,62 @@ let flipped = false;
 function pullCard(){ stage.classList.add('pulled'); }
 function tuckBack(){ stage.classList.remove('pulled'); }
 function flipCard(){ flipped = !flipped; card3d.classList.toggle('flipped', flipped); }
+
+// Pull the card out by dragging it up with a thumb/mouse.
+const peekcard = document.getElementById('peekcard');
+const PULL_THRESHOLD = 50;
+let activePointerId = null;
+let startY = 0;
+let rawDelta = 0;
+let dragDelta = 0;
+
+function setCardDrag(delta){
+  rawDelta = delta;
+  dragDelta = Math.min(0, delta);
+  peekcard.style.transform = `translateX(-50%) translateY(${dragDelta}px)`;
+}
+
+function resetCardDrag(){
+  peekcard.style.transform = '';
+  peekcard.classList.remove('dragging');
+  activePointerId = null;
+  rawDelta = 0;
+  dragDelta = 0;
+}
+
+peekcard.addEventListener('pointerdown', (e)=>{
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  activePointerId = e.pointerId;
+  startY = e.clientY;
+  rawDelta = 0;
+  dragDelta = 0;
+  peekcard.classList.add('dragging');
+  try{ peekcard.setPointerCapture(e.pointerId); }catch{}
+});
+
+peekcard.addEventListener('pointermove', (e)=>{
+  if(e.pointerId !== activePointerId) return;
+  e.preventDefault();
+  setCardDrag(e.clientY - startY);
+}, {passive:false});
+
+function finishPull(e){
+  if(e.pointerId !== activePointerId) return;
+  try{ peekcard.releasePointerCapture(e.pointerId); }catch{}
+  const wasTap = Math.abs(rawDelta) < 8;
+  const shouldOpen = wasTap || dragDelta <= -PULL_THRESHOLD;
+  resetCardDrag();
+  if(shouldOpen) pullCard();
+}
+
+peekcard.addEventListener('pointerup', finishPull);
+peekcard.addEventListener('pointercancel', (e)=>{
+  if(e.pointerId !== activePointerId) return;
+  resetCardDrag();
+});
+peekcard.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pullCard(); }
+});
 
 // college stamp chooser — single chosen
 document.querySelectorAll('.stamp').forEach(s=>{
