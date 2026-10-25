@@ -48,7 +48,22 @@ def _current_rss_mb() -> float:
     except Exception:
         return -1.0
 
-# Local Playwright render service (replaces Rendex, whose free tier is exhausted).
+# Browserless hosted Chromium over CDP (primary path). Configure via BROWSERLESS_TOKEN.
+def _browserless_ws_url() -> str:
+    token = os.environ.get("BROWSERLESS_TOKEN", "")
+    return f"wss://production-sfo.browserless.io?token={token}"
+
+
+def _render_html_to_png_via_browser(page, slide_html: str, png_file: Path) -> None:
+    """Set slide HTML on an existing CDP page and write the PNG screenshot."""
+    try:
+        page.set_content(slide_html, wait_until="networkidle")
+        png_file.write_bytes(page.screenshot(type="png"))
+    except Exception as exc:
+        raise RuntimeError(f"Browserless render failed for {png_file}: {exc}") from exc
+
+
+# Local Playwright render service (fallback when BROWSERLESS_TOKEN is unset).
 # Runs on a separate machine, exposed via ngrok. Configure via RENDER_SERVICE_URL.
 # POSTs raw HTML (Content-Type: text/html) to /render, expects raw PNG bytes back.
 def _render_service_url() -> str:
@@ -286,19 +301,24 @@ def render_carousel(
     device_scale_factor: int = 2,
 ) -> List[Path]:
     """
-    Render a StudyReel Carousel into 1080x1350 PNG images via the local render service.
+    Render a StudyReel Carousel into 1080x1350 PNG images.
 
-    The Jinja HTML for each slide is POSTed as raw HTML (Content-Type: text/html)
-    to ``<RENDER_SERVICE_URL>/render`` (local Playwright Chromium, see
-    repo-root render_service.py). The binary PNG response is written to
-    ``out_dir/slide_XX.png`` so the existing local-file contract holds
-    (ZIP export, publisher file-copy, tests).
+    Primary path: connect once per deck to Browserless Chromium over CDP
+    (``BROWSERLESS_TOKEN``), open a single 1080x1350 page, and for each slide
+    ``set_content`` then screenshot straight to ``out_dir/slide_XX.png``.
+
+    Fallback path: when ``BROWSERLESS_TOKEN`` is unset, POST raw HTML to
+    ``<RENDER_SERVICE_URL>/render`` (local Playwright Chromium, see
+    repo-root render_service.py) and write the binary PNG response.
+
+    Either way the local file contract holds (ZIP export, publisher
+    file-copy, tests).
 
     Args:
         carousel: Carousel Pydantic model instance (canonical schema).
         out_dir: Directory where PNG slides will be saved.
-        device_scale_factor: Kept for API compatibility; the render service
-            renders at 1080x1350 viewport with device_scale_factor=1. Ignored.
+        device_scale_factor: Kept for API compatibility; rendering uses a
+            1080x1350 viewport with device_scale_factor=1. Ignored.
 
     Returns:
         List of Path objects pointing to the rendered 1080x1350 PNG files.
@@ -307,7 +327,12 @@ def render_carousel(
         (empty string if upload was skipped/failed).
         The URLs are also persisted to ``<out_dir>/cloud_urls.json``.
     """
-    print(f"Rendering via RENDER_SERVICE_URL={_render_service_url()}", flush=True)
+    use_browserless = bool(os.environ.get("BROWSERLESS_TOKEN"))
+    ws_url = _browserless_ws_url() if use_browserless else ""
+    if use_browserless:
+        print(f"Rendering via Browserless CDP ({ws_url.split('?', 1)[0]})", flush=True)
+    else:
+        print(f"Rendering via RENDER_SERVICE_URL={_render_service_url()} (BROWSERLESS_TOKEN unset)", flush=True)
     print(f"Rendering carousel: {len(carousel.slides)} slides, mem={_current_rss_mb():.1f} MB", flush=True)
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -322,50 +347,73 @@ def render_carousel(
     generated_pngs: List[Path] = []
     cloud_urls: List[str] = []
 
-    for idx, slide in enumerate(carousel.slides, start=1):
-        slide_html = render_slide_html(
-            slide=slide,
-            carousel=carousel,
-            index=idx - 1,
-            jinja_env=jinja_env,
-            fonts_css=fonts_css,
-            tailwind_css=tailwind_css,
-        )
+    browser = None
+    playwright_ctx = None
+    page = None
+    try:
+        if use_browserless:
+            from playwright.sync_api import sync_playwright
 
-        # File path for current slide
-        png_file = out_path / f"slide_{idx:02d}.png"
+            playwright_ctx = sync_playwright().start()
+            browser = playwright_ctx.chromium.connect_over_cdp(ws_url)
+            page = browser.new_page(viewport={"width": 1080, "height": 1350})
 
-        # Render HTML to PNG via local render service (Playwright Chromium).
-        # Templates are fed as-is; binary PNG is written to png_file.
-        # Sequential per-slide streaming: only one slide's HTML/PNG bytes are
-        # held in memory at a time (resp bytes are freed on each loop iteration;
-        # local PNGs stay on disk for ZIP export / publisher, not in RAM).
-        _render_html_to_png_via_service(slide_html, png_file)
-        del slide_html
+        for idx, slide in enumerate(carousel.slides, start=1):
+            slide_html = render_slide_html(
+                slide=slide,
+                carousel=carousel,
+                index=idx - 1,
+                jinja_env=jinja_env,
+                fonts_css=fonts_css,
+                tailwind_css=tailwind_css,
+            )
 
-        if not png_file.exists() or png_file.stat().st_size == 0:
-            raise RuntimeError(f"Failed to generate slide image at {png_file}")
+            # File path for current slide
+            png_file = out_path / f"slide_{idx:02d}.png"
 
-        # Ensure exact 1080x1350 size (resize if the service returns a different size)
-        with Image.open(png_file) as img:
-            if img.size != (1080, 1350):
-                resized = img.resize((1080, 1350), Image.Resampling.LANCZOS)
-                resized.save(png_file, format="PNG", optimize=True)
+            # Render HTML to PNG with no artificial delays. Sequential per-slide
+            # streaming keeps only one slide's HTML/PNG bytes in memory at once;
+            # local PNGs stay on disk for ZIP export / publisher, not in RAM.
+            if page is not None:
+                _render_html_to_png_via_browser(page, slide_html, png_file)
+            else:
+                _render_html_to_png_via_service(slide_html, png_file)
+            del slide_html
 
-        with Image.open(png_file) as img:
-            if img.size != (1080, 1350):
-                raise ValueError(f"Rendered PNG size {img.size} does not match required (1080, 1350)")
+            if not png_file.exists() or png_file.stat().st_size == 0:
+                raise RuntimeError(f"Failed to generate slide image at {png_file}")
 
-        generated_pngs.append(png_file)
+            # Ensure exact 1080x1350 size (resize if the renderer returns a different size)
+            with Image.open(png_file) as img:
+                if img.size != (1080, 1350):
+                    resized = img.resize((1080, 1350), Image.Resampling.LANCZOS)
+                    resized.save(png_file, format="PNG", optimize=True)
 
-        # Upload to Cloudinary (graceful fallback if not configured / upload fails)
-        public_id = f"studyreel/{carousel.carousel_id}/slide_{idx:02d}"
-        try:
-            from app.storage.cloudinary_client import upload_image
-            url = upload_image(png_file, public_id)
-            cloud_urls.append(url or "")
-        except Exception:
-            cloud_urls.append("")
+            with Image.open(png_file) as img:
+                if img.size != (1080, 1350):
+                    raise ValueError(f"Rendered PNG size {img.size} does not match required (1080, 1350)")
+
+            generated_pngs.append(png_file)
+
+            # Upload to Cloudinary (graceful fallback if not configured / upload fails)
+            public_id = f"studyreel/{carousel.carousel_id}/slide_{idx:02d}"
+            try:
+                from app.storage.cloudinary_client import upload_image
+                url = upload_image(png_file, public_id)
+                cloud_urls.append(url or "")
+            except Exception:
+                cloud_urls.append("")
+    finally:
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if playwright_ctx is not None:
+            try:
+                playwright_ctx.stop()
+            except Exception:
+                pass
 
     # Persist cloud_urls alongside local renders for publisher consumption.
     # Treat renders/ as temp — local PNGs stay for now, but publisher will prefer CDN URLs.
