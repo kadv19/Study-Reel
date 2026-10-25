@@ -31,7 +31,7 @@ Test: `cd backend && .venv/bin/python -m pytest tests/ -v` → 64 green (53+7+4)
 
 ## What It Does
 
-- **Syllabus → cards:** `pdfplumber` boundary + noise clean → `gemini-3.6-flash` (failover 5 models + Ollama `qwen2.5:7b`) generates `MicroTopic` (header ≤30, body ≤140, code ≤22×62, back_header 30/back_body 140/exam_weight low/med/high) → HITL edit → Playwright renders PNGs.
+- **Syllabus → cards:** `pdfplumber` boundary + noise clean → `gemini-3.6-flash` (failover 5 models + Groq/OpenAI-compatible fallback, optional remote Ollama) generates `MicroTopic` (header ≤30, body ≤140, code ≤22×62, back_header 30/back_body 140/exam_weight low/med/high) → HITL edit → Playwright renders PNGs.
 - **Deck:** book-spine shelves (fill = mastered/total), stack of 3 cards peek, 3D flip front/back, drag left=Review amber, down=Catalog cyan, right=Got it green (display `Got it`, enum `mastered`). `100dvh`, 44px targets, haptics.
 - **Cabinet:** 3-level drill-down — Books → Shelves → Cards — with progress rings, slide previews, iOS-style horizontal transitions, and a flip-card detail modal; per-user `user_card_states` (anon → pseudo `name/college/email` via `POST /api/v1/users`, 3-dismiss onboarding).
 - **Feed:** legacy global trending `likes*0.7+views*0.15-hours*0.08` kept at `/feed_legacy`, Deck is primary.
@@ -73,7 +73,7 @@ PDF upload → process_pdf → modules → Gemini MicroTopic[] → HITL back_* �
 
 ## Status
 
-- **Done:** Ingestion, Gemini+Ollama, render (6/6), publisher 60/60, deck/cabinet (PWA), pseudo accounts, docker/run.sh, 8 seeds.
+- **Done:** Ingestion, Gemini+Groq fallback, render (6/6), publisher 60/60, deck/cabinet (PWA), pseudo accounts, docker/run.sh, 8 seeds.
 - **Next:** Real Instagram (`RENDER_CDN_URL` + status poll), spaced repetition, Ask-this-slide, per-user tailoring weight.
 
 **Stack:** Python 3.12, FastAPI, SQLite (`studyreel.db` + `studyreel_publisher.db`), pdfplumber, google-genai, Playwright, Pillow, Pygments, Streamlit, JS pointer events.

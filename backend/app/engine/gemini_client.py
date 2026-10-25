@@ -33,8 +33,12 @@ MODEL_FAILOVER = [
     "gemini-flash-lite-latest",
 ]
 
-# Local fallback via Ollama — unlimited, no quota. Used when every Gemini
-# model is quota-exhausted (free tier is 20 req/day per model).
+# OpenAI-compatible fallback (Groq by default) after every Gemini model fails.
+FALLBACK_BASE_URL_DEFAULT = "https://api.groq.com/openai/v1"
+FALLBACK_MODEL_DEFAULT = "llama-3.3-70b-versatile"
+
+# Local fallback via Ollama — only used when explicitly configured on a
+# non-localhost host after the Groq-compatible fallback also fails.
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
@@ -70,8 +74,9 @@ _log_ollama_startup_config()
 # host (cloud deployments — Ollama runs on the user's PC, unreachable from
 # Render). Keep the message stable; the API layer surfaces it to the client.
 OLLAMA_ABSENT_MESSAGE = (
-    "AI generation temporarily unavailable — Gemini is at capacity and no "
-    "Ollama fallback is configured on this server. Please retry in a minute."
+    "AI generation temporarily unavailable — Gemini and the Groq fallback are "
+    "unavailable, and no Ollama fallback is configured on this server. "
+    "Please retry in a minute."
 )
 
 # Whole-chain retries: Gemini 503s are usually transient — a 3s retry often succeeds.
@@ -135,6 +140,27 @@ def _is_ollama_absent() -> bool:
         return True
     lowered = raw.lower()
     return "localhost" in lowered or "127.0.0.1" in lowered or "::1" in lowered
+
+
+def _fallback_config() -> tuple[str, str, str]:
+    """Read the OpenAI-compatible fallback config at call time."""
+    base = (os.getenv("FALLBACK_BASE_URL") or FALLBACK_BASE_URL_DEFAULT).strip().rstrip("/")
+    key = (os.getenv("FALLBACK_API_KEY") or "").strip()
+    model = (os.getenv("FALLBACK_MODEL") or FALLBACK_MODEL_DEFAULT).strip()
+    return base, key, model
+
+
+def _loads_json_content(content: str):
+    """Parse a JSON response, tolerating an accidental markdown fence."""
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = text[3:]
+        if text.lower().startswith("json"):
+            text = text[4:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    return json.loads(text)
 
 
 def _raise_no_ollama_fallback(last_exc: Exception | None = None) -> None:
@@ -207,6 +233,22 @@ def _build_system_prompt(depth_format: str = "detailed", tone: str = "default", 
     if depth_format in ("diagram", "both"):
         extras.append("Diagram spec: nodes are short labels (≤ 20 chars each), edges are [source, target] string pairs where both names exactly match nodes. Keep to ≤6 nodes and ≤8 edges per diagram, simple vertical/grid flow.")
     return base + "\n\nAdditional instructions:\n- " + "\n- ".join(extras)
+
+
+def _fallback_user_prompt(contents: str, system_prompt: str) -> str:
+    """Shared JSON-object instruction for OpenAI-compatible/Ollama fallbacks."""
+    has_diagram = "diagram" in system_prompt.lower()
+    diagram_keys = (
+        ', diagram (object with nodes:[string] and edges:[[string,string]] or null)'
+        if has_diagram else ""
+    )
+    return (
+        f"{contents}\n\n"
+        f"Respond with ONLY a JSON object of the form {{\"topics\": [ ... ]}}. "
+        f"Each element of the array must have exactly these keys: header "
+        f"(string, max 30 chars), body (string, max 140 chars), code_block "
+        f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null){diagram_keys}."
+    )
 
 
 class GeminiClient:
@@ -350,19 +392,76 @@ class GeminiClient:
         except Exception:
             # Non-transient Gemini errors propagate immediately — no Ollama fallback.
             raise
-        # All Gemini models failed with 503/UNAVAILABLE/quota errors across all chain retries.
-        # Explicit Ollama fallback path: on cloud hosts Ollama doesn't exist
-        # (it runs on the user's PC, unreachable from Render), so a localhost
-        # fallback would fail silently with a confusing error. Try Ollama when
-        # configured, but surface a clear HTTP 503 when it is absent.
+        # Every Gemini model failed with 503/UNAVAILABLE/quota errors across
+        # all chain retries. Try the OpenAI-compatible fallback first, then
+        # Ollama only when a non-localhost OLLAMA_BASE_URL is configured.
+        logger.warning("Falling back to Groq...")
         try:
-            return self._generate_ollama(contents, system_prompt)
-        except Exception as ollama_exc:
-            if _is_ollama_absent():
-                _raise_no_ollama_fallback(last_exc or ollama_exc)
-            raise RuntimeError(
-                f"Gemini quota exhausted and Ollama fallback failed: {ollama_exc}"
-            ) from ollama_exc
+            return self._generate_groq(contents, system_prompt)
+        except Exception as groq_exc:
+            if not _is_ollama_absent():
+                try:
+                    return self._generate_ollama(contents, system_prompt)
+                except Exception as ollama_exc:
+                    raise RuntimeError(
+                        "Gemini quota exhausted, Groq fallback failed, and "
+                        f"Ollama fallback failed: {ollama_exc}"
+                    ) from ollama_exc
+            _raise_no_ollama_fallback(groq_exc or last_exc)
+
+    def _generate_groq(self, contents: str, system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
+        """Fallback to an OpenAI-compatible chat completions endpoint (Groq)."""
+        base, api_key, model = _fallback_config()
+        if not api_key:
+            raise RuntimeError("FALLBACK_API_KEY is not set for the Groq fallback")
+        try:
+            import httpx
+        except ImportError as exc:
+            raise RuntimeError("httpx is required for the Groq fallback") from exc
+
+        url = f"{base}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": _fallback_user_prompt(contents, system_prompt)},
+            ],
+            "temperature": 0.4,
+            "response_format": {"type": "json_object"},
+        }
+        logger.info("Groq fallback request: model=%s url=%s", model, url)
+        try:
+            resp = httpx.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=120.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as exc:
+            raise RuntimeError(f"Groq fallback request failed: {exc}") from exc
+
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"Groq returned an unexpected response: {data!r:.300}") from exc
+        if isinstance(content, list):
+            content = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in content
+            )
+        raw = _loads_json_content(content)
+        self.model = f"groq:{model}"
+        if isinstance(raw, list):
+            return raw
+        topics = raw.get("topics") if isinstance(raw, dict) else None
+        if not isinstance(topics, list):
+            raise RuntimeError("Groq response did not contain a topics array")
+        return topics
 
     def _generate_ollama(self, contents: str, system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
         """Fallback to a local Ollama model when Gemini quota is exhausted.
@@ -382,19 +481,9 @@ class GeminiClient:
         ollama_model = os.getenv("OLLAMA_MODEL", OLLAMA_MODEL)
         headers = _ollama_headers()
 
-        # include diagram in Ollama schema when prompt asks for it
-        has_diagram = "diagram" in system_prompt.lower()
-        diagram_keys = ", diagram (object with nodes:[string] and edges:[[string,string]] or null)" if has_diagram else ""
-        user_prompt = (
-            f"{contents}\n\n"
-            f"Respond with ONLY a JSON object of the form {{\"topics\": [ ... ] }}. "
-            f"Each element of the array must have exactly these keys: header "
-            f"(string, max 30 chars), body (string, max 140 chars), code_block "
-            f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null){diagram_keys}."
-        )
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": _fallback_user_prompt(contents, system_prompt)},
         ]
 
         # Path 1: ollama package with headers= support (preferred when installed).
