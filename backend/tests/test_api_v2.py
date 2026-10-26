@@ -64,10 +64,14 @@ def test_v2_requires_admin_key(client_ctx):
     assert client_ctx.get("/api/v2/posts").status_code == 403
     assert client_ctx.post("/api/v2/oauth/connect").status_code == 403
     assert client_ctx.get("/api/v2/status").status_code == 403
-    assert client_ctx.post(
+
+
+def test_publish_does_not_require_admin_key(client_ctx):
+    r = client_ctx.post(
         "/api/v2/publish",
-        json={"carousel_id": 1, "caption": "x", "hashtags": ["#a", "#b", "#c"]},
-    ).status_code == 403
+        json={"carousel_id": 987654321, "caption": "x", "hashtags": ["#a", "#b", "#c"]},
+    )
+    assert r.status_code == 404
 
 
 def test_publish_requires_rendered_carousel(client_ctx, monkeypatch, tmp_path, fake_publisher, admin_headers):

@@ -63,7 +63,7 @@ def metadata_preview(payload: MetadataPreviewRequest) -> dict:
         ).model_dump()
 
 
-@router.post("/publish", dependencies=[Depends(require_admin_key)])
+@router.post("/publish")
 def publish(payload: PublishRequest) -> dict:
     record = get_carousel(payload.carousel_id)
     if record is None:
