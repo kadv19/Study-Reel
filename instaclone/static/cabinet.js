@@ -6,7 +6,7 @@ const state = {
   level: 1,
   books: [],
   shelves: [],
-  trayCounts: { review: {}, catalog: {}, mastered: {} },
+  trayCounts: { review: {}, mastered: {} },
   activeBook: null,
   activeShelf: null,
   deck: null,
@@ -15,7 +15,7 @@ const state = {
   modalFlipped: false
 };
 
-const STATUS_LABEL = { review: 'Review', catalog: 'Catalog', mastered: 'Mastered', unfiled: 'New' };
+const STATUS_LABEL = { review: 'Review', mastered: 'Got it', unfiled: 'New' };
 const TINTS = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#fb7185', '#22d3ee'];
 
 const bookGrid = document.getElementById('bookGrid');
@@ -133,8 +133,8 @@ function deriveBooksFromShelves(){
 }
 
 function buildTrayCounts(payloads){
-  const counts = { review: {}, catalog: {}, mastered: {} };
-  ['review', 'catalog', 'mastered'].forEach((tray) => {
+  const counts = { review: {}, mastered: {} };
+  ['review', 'mastered'].forEach((tray) => {
     const cards = payloads[tray] && Array.isArray(payloads[tray].cards) ? payloads[tray].cards : [];
     cards.forEach((card) => {
       const key = String(card.post_id);
@@ -198,7 +198,7 @@ function renderBooks(){
       <h2 class="book-title">${esc(book.label || 'Untitled book')}</h2>
       <p class="book-sub">${esc(sub)}</p>
       <div class="book-bottom">
-        <div class="book-frac"><b>${mastered}/${total}</b>mastered</div>
+        <div class="book-frac"><b>${mastered}/${total}</b>got it</div>
         <div class="ring" style="--pct:${pct}"><span>${pct}%</span></div>
       </div>
     `;
@@ -221,13 +221,11 @@ function renderShelves(book){
     const total = Number(shelf.total_slides) || 0;
     const mastered = state.trayCounts.mastered[key] || Number(shelf.mastered_count) || 0;
     const review = state.trayCounts.review[key] || 0;
-    const catalog = state.trayCounts.catalog[key] || 0;
     const pct = clampPct((shelf.fill_pct || 0) * 100);
     const tint = TINTS[index % TINTS.length];
     let chips = '';
     if(review) chips += `<span class="chip review">${review} Review</span>`;
-    if(mastered) chips += `<span class="chip mastered">${mastered} Mastered</span>`;
-    if(!review && !mastered && catalog) chips += `<span class="chip cards">${catalog} Saved</span>`;
+    if(mastered) chips += `<span class="chip mastered">${mastered} Got it</span>`;
     if(!chips) chips = `<span class="chip cards">${total} Cards</span>`;
 
     const btn = document.createElement('button');
@@ -239,7 +237,7 @@ function renderShelves(book){
       <div class="shelf-main">
         <div class="shelf-kicker">${shelf.is_seed ? 'Demo shelf' : `Module ${String(index + 1).padStart(2, '0')}`}</div>
         <div class="shelf-title">${esc(shelf.module_name || shelf.label || 'Untitled shelf')}</div>
-        <div class="shelf-meta">${total} cards · ${pct}% mastered</div>
+        <div class="shelf-meta">${total} cards · ${pct}% got it</div>
       </div>
       <div class="shelf-side">${chips}</div>
       <span class="shelf-go">›</span>
@@ -297,7 +295,7 @@ function renderCards(data, shelf){
   cards.forEach((card) => {
     const front = card.front || {};
     const image = slideImageUrl(shelf, card);
-    const status = STATUS_LABEL[card.status] ? card.status : 'unfiled';
+    const status = card.status === 'catalog' ? 'review' : (STATUS_LABEL[card.status] ? card.status : 'unfiled');
     const statusLabel = STATUS_LABEL[status];
     const slideNumber = String((Number(card.slide_index) || 0) + 1).padStart(2, '0');
     const body = front.body && String(front.body).trim().toLowerCase() !== 'see diagram'
@@ -459,7 +457,7 @@ function weightDots(weight){
 function openCardModal(card){
   const front = card.front || {};
   const back = card.back || {};
-  const status = STATUS_LABEL[card.status] ? card.status : 'unfiled';
+  const status = card.status === 'catalog' ? 'review' : (STATUS_LABEL[card.status] ? card.status : 'unfiled');
   const bodyIsSeeDiagram = front.body && String(front.body).trim().toLowerCase() === 'see diagram';
   const body = bodyIsSeeDiagram ? '' : (front.body ? `<p>${esc(front.body)}</p>` : '');
   const frontCode = front.code ? `<div class="code mono">${esc(front.code)}</div>` : '';
@@ -499,7 +497,10 @@ function openCardModal(card){
     </div>
     <div class="cardfoot">
       <span class="weight">exam weight ${weightDots(back.exam_weight)}</span>
-      <button class="flipbtn" onclick="flipCard(event)">flip ↻</button>
+      <div class="cardactions">
+        <button class="reportbtn" type="button" data-card-id="${esc(card.card_key)}" aria-label="Report wrong card" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" onclick="reportWrongCard(event, this)">Report wrong card</button>
+        <button class="flipbtn" onclick="flipCard(event)">flip ↻</button>
+      </div>
     </div>
   `;
 
@@ -515,6 +516,35 @@ function flipCard(event){
   if(event) event.stopPropagation();
   state.modalFlipped = !state.modalFlipped;
   modalFlip.classList.toggle('flipped', state.modalFlipped);
+}
+
+async function reportWrongCard(event, btn){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if(!btn || btn.disabled) return;
+  const cardId = btn.dataset.cardId;
+  if(!cardId) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Reporting…';
+  try{
+    const uid = localStorage.getItem('sr_user_real_id') || '';
+    const res = await fetch(`${BACKEND}/api/v1/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers() },
+      body: JSON.stringify({ card_id: cardId, user_id: uid, reason: 'Reported wrong card' })
+    });
+    if(res.status === 401){ handleUnauthorized(); return; }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    btn.textContent = 'Reported ✓';
+    setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1600);
+  }catch(err){
+    console.error('report', err);
+    btn.textContent = 'Try again';
+    setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1600);
+  }
 }
 
 function toggleTheme(){
@@ -533,17 +563,16 @@ function cabinetLogout(){
 
 async function loadCabinet(){
   bookGrid.innerHTML = loadingHtml('Loading your cabinet…');
-  const [library, shelves, review, catalog, mastered] = await Promise.all([
+  const [library, shelves, review, mastered] = await Promise.all([
     getJSON('/api/v1/library'),
     getJSON('/api/v1/shelves'),
     getJSON('/api/v1/cabinet?tray=review'),
-    getJSON('/api/v1/cabinet?tray=catalog'),
     getJSON('/api/v1/cabinet?tray=mastered')
   ]);
 
   state.books = Array.isArray(library) ? library : [];
   state.shelves = Array.isArray(shelves) ? shelves : [];
-  buildTrayCounts({ review, catalog, mastered });
+  buildTrayCounts({ review, mastered });
   if(!state.books.length && state.shelves.length) deriveBooksFromShelves();
   renderBooks();
 }
@@ -580,6 +609,7 @@ window.cabinetLogout = cabinetLogout;
 window.openCardModal = openCardModal;
 window.closeCardModal = closeCardModal;
 window.flipCard = flipCard;
+window.reportWrongCard = reportWrongCard;
 
 if(!history.state || history.state.srView !== 'cabinet'){
   history.replaceState({ srView: 'cabinet', level: 1 }, '');

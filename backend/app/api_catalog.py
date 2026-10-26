@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import current_user
 from app.db.database import (
+    create_card_report,
     delete_syllabus,
     get_carousel,
     get_carousel_owner,
@@ -17,7 +18,7 @@ from app.db.database import (
     list_card_states,
     upsert_card_state,
 )
-from app.schemas import FileCardRequest
+from app.schemas import FileCardRequest, ReportRequest
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
 
@@ -244,7 +245,7 @@ def get_deck(
                 unfiled.append(card)
             elif st == "review":
                 review.append(card)
-            elif st in ("catalog","mastered"):
+            elif st == "mastered":
                 continue
         deck_cards = unfiled + review
     return {
@@ -287,14 +288,26 @@ def file_card(
     return {"card_key": f"{cid}:{payload.slide_index}", "status": payload.status, "shelf_fill": fill, "row": row}
 
 
-@router.get("/cabinet")
-def get_cabinet(
-    tray: str = Query(..., description="review|catalog|mastered"),
+@router.post("/report")
+def report_card(
+    payload: ReportRequest,
     user: dict = Depends(current_user),
 ) -> dict:
     uid = user["id"]
-    if tray not in ("review","catalog","mastered"):
-        raise HTTPException(400, "tray must be review|catalog|mastered")
+    if payload.user_id and payload.user_id != uid:
+        raise HTTPException(403, "user_id does not match authenticated user")
+    row = create_card_report(payload.card_id, uid, payload.reason)
+    return {"reported": True, "report_id": row.get("id"), **row}
+
+
+@router.get("/cabinet")
+def get_cabinet(
+    tray: str = Query(..., description="review|mastered"),
+    user: dict = Depends(current_user),
+) -> dict:
+    uid = user["id"]
+    if tray not in ("review","mastered"):
+        raise HTTPException(400, "tray must be review|mastered")
     states = list_card_states(uid, status=tray)
     cards = []
     for r in states:

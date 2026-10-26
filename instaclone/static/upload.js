@@ -14,6 +14,53 @@ function checkUnauthorized(res){
   if(res.status === 401){ handleUnauthorized(); return true; }
   return false;
 }
+async function readError(res){
+  const text = await res.text();
+  try{
+    const data = JSON.parse(text);
+    return data.detail || data.message || text;
+  }catch{
+    return text;
+  }
+}
+
+let statusPoll = null;
+let statusPollInFlight = false;
+function stopStatusPolling(){
+  if(statusPoll){ clearInterval(statusPoll); statusPoll = null; }
+}
+function startStatusPolling(){
+  stopStatusPolling();
+  const tick = async ()=>{
+    if(statusPollInFlight) return;
+    statusPollInFlight = true;
+    try{
+      const res = await fetch(`${BACKEND}/api/v1/status`, {headers: uidHeaders()});
+      if(checkUnauthorized(res)) return;
+      if(!res.ok) return;
+      const job = await res.json();
+      if(!job || !job.state) return;
+      const pos = job.queue_position || job.position || 0;
+      if(job.state === 'QUEUED'){
+        if(overallText) overallText.textContent = `Queued — position ${pos}…`;
+        if(formStatus) formStatus.textContent = `Waiting in queue (position ${pos})…`;
+      } else if(job.state === 'PROCESSING'){
+        if(formStatus && formStatus.textContent.startsWith('Waiting in queue')) formStatus.textContent = '';
+        const pct = Math.max(5, Math.round((Number(job.progress) || 0) * 100));
+        const current = overallBar ? (parseFloat(overallBar.style.width) || 0) : 0;
+        if(overallBar) overallBar.style.width = Math.max(current, pct) + '%';
+        if(overallText) overallText.textContent = job.message || 'Processing…';
+      } else if(job.state === 'FAILED'){
+        if(formStatus) formStatus.textContent = '❌ ' + (job.message || 'Job failed');
+      }
+    }catch(e){
+    }finally{
+      statusPollInFlight = false;
+    }
+  };
+  tick();
+  statusPoll = setInterval(tick, 1200);
+}
 
 let slideCount = 10;
 const syllabusFile = document.getElementById('syllabusFile');
@@ -89,6 +136,7 @@ generateBtn.addEventListener('click', async ()=>{
   if(doneCard) doneCard.style.display='none';
   if(logBox){ logBox.innerHTML=''; logBox.style.display='none'; }
   setProgress(5, 'Uploading syllabus…');
+  startStatusPolling();
 
   let uploaded = null;
   try{
@@ -98,12 +146,13 @@ generateBtn.addEventListener('click', async ()=>{
     log(`Uploading ${sFile.name} ${rFile ? '+ '+rFile.name : ''} as ${depth}/${tone} ×${slideCount}`);
     const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/syllabus/upload`, {method:'POST', body: form, headers: uidHeaders()});
     if(checkUnauthorized(res)) return;
-    if(!res.ok){ const t=await res.text(); throw new Error(t); }
+    if(!res.ok){ const msg=await readError(res); throw new Error(msg); }
     const upText = await res.text();
     uploaded = JSON.parse(upText);
     log(`Extracted ${uploaded.modules.length} modules from ${uploaded.file_name}`);
     setProgress(15, `Extracted ${uploaded.modules.length} modules — generating tailored topics…`);
   }catch(e){
+    stopStatusPolling();
     setProgress(0, 'Upload failed');
     log('❌ Upload failed: '+e.message);
     formStatus.textContent='❌ '+e.message;
@@ -114,6 +163,7 @@ generateBtn.addEventListener('click', async ()=>{
 
   const modules = uploaded.modules || [];
   if(!modules.length){
+    stopStatusPolling();
     log('No modules found');
     setProgress(0, 'No modules');
     generateBtn.disabled=false;
@@ -137,7 +187,7 @@ generateBtn.addEventListener('click', async ()=>{
         body: JSON.stringify({depth_format: depth, tone: tone, slide_count: slideCount})
       });
       if(checkUnauthorized(tRes)) return;
-      if(!tRes.ok){ const t=await tRes.text(); throw new Error(t); }
+      if(!tRes.ok){ const msg=await readError(tRes); throw new Error(msg); }
       const tText = await tRes.text();
       const topics = JSON.parse(tText);
       log(`→ ${topics.length} topics for ${modLabel}: ${topics.map(t=>t.header).join(' | ').slice(0,120)}`);
@@ -150,7 +200,7 @@ generateBtn.addEventListener('click', async ()=>{
         body: JSON.stringify({module_name: modLabel.slice(0,60), topics: topics})
       });
       if(checkUnauthorized(rRes)) return;
-      if(!rRes.ok){ const t=await rRes.text(); throw new Error(t); }
+      if(!rRes.ok){ const msg=await readError(rRes); throw new Error(msg); }
       const rText = await rRes.text();
       const rendered = JSON.parse(rText);
       log(`→ Rendered ${rendered.slide_count} slides (id ${rendered.id}, ${rendered.carousel_id})`);
@@ -176,7 +226,7 @@ generateBtn.addEventListener('click', async ()=>{
         body: JSON.stringify({carousel_id: rendered.id, caption: meta.caption, hashtags: meta.hashtags, cover_slide: Math.min(meta.cover_slide||0, topics.length-1)})
       });
       if(checkUnauthorized(pRes)) return;
-      if(!pRes.ok){ const t=await pRes.text(); throw new Error(t); }
+      if(!pRes.ok){ const msg=await readError(pRes); throw new Error(msg); }
       const pText = await pRes.text();
       const pub = JSON.parse(pText);
       log(`→ Published ${modLabel} → ${pub.media_id} (${pub.provider||'instaclone'})`);
@@ -190,6 +240,7 @@ generateBtn.addEventListener('click', async ()=>{
     }
   }
 
+  stopStatusPolling();
   setProgress(100, `Done — ${results.length}/${modules.length} modules published`);
   log(`✅ All done — ${results.length} carousels published`);
   if(doneCard){

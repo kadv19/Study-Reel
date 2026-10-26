@@ -27,8 +27,8 @@ const topCard = document.getElementById('topCard');
 const flipInner = document.getElementById('flipInner');
 const faceFront = document.getElementById('faceFront');
 const faceBack = document.getElementById('faceBack');
-const zones = { review: document.getElementById('zoneReview'), catalog: document.getElementById('zoneCatalog'), mastered: document.getElementById('zoneMastered'), replay: document.getElementById('zoneReplay') };
-const trays = { review: document.getElementById('trayReview'), catalog: document.getElementById('trayCatalog'), mastered: document.getElementById('trayMastered') };
+const zones = { review: document.getElementById('zoneReview'), mastered: document.getElementById('zoneMastered'), replay: document.getElementById('zoneReplay') };
+const trays = { review: document.getElementById('trayReview'), mastered: document.getElementById('trayMastered') };
 const back2 = document.getElementById('back2');
 const back3 = document.getElementById('back3');
 const emptyMsg = document.getElementById('emptyMsg');
@@ -442,7 +442,7 @@ function renderStack(){
     <div class="punch"></div>
     <div class="cardhead"><span class="tab mono">${bk.back_header||'WHY IT MATTERS'}</span></div>
     <div class="cardbody"><h2>${bk.back_header||'Why it matters'}</h2><p>${bk.back_body||'Recall this for VTU.'}</p>${ft.code?`<div class="code mono">${bk.exam_weight? 'Weight: '+bk.exam_weight : ''}</div>`:''}</div>
-    <div class="cardfoot"><span class="weight">exam weight ${weightDots(bk.exam_weight)}</span><button class="flipbtn" onclick="flipCard(event)">flip ↻</button></div>
+    <div class="cardfoot"><span class="weight">exam weight ${weightDots(bk.exam_weight)}</span><div class="cardactions"><button class="reportbtn" type="button" data-card-id="${card.card_key}" aria-label="Report wrong card" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" onclick="reportWrongCard(event, this)">Report wrong card</button><button class="flipbtn" onclick="flipCard(event)">flip ↻</button></div></div>
   `;
   if(topCard){
     topCard.style.transition='none';
@@ -466,6 +466,34 @@ function flipCard(e){
   if(flipInner) flipInner.classList.toggle('flipped', flipped);
 }
 
+async function reportWrongCard(event, btn){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if(!btn || btn.disabled) return;
+  const cardId = btn.dataset.cardId;
+  if(!cardId) return;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Reporting…';
+  try{
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/report`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json', ...uidHeaders()},
+      body: JSON.stringify({card_id: cardId, user_id: REAL_ID || '', reason: 'Reported wrong card'})
+    });
+    if(res.status===401){ handleUnauthorized(); return; }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    btn.textContent = 'Reported ✓';
+    setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1600);
+  }catch(err){
+    console.error('report', err);
+    btn.textContent = 'Try again';
+    setTimeout(()=>{ btn.textContent = original; btn.disabled = false; }, 1600);
+  }
+}
+
 async function enterReplay(){
   if(!activeShelf) return;
   replayMode = true;
@@ -482,7 +510,7 @@ let dragging=false, startX=0, startY=0, dx=0, dy=0, startT=0, vx=0, lockedAxis=n
 let scrollableEl=null, startScrollTop=0;
 if(topCard){
 topCard.addEventListener('pointerdown', (e)=>{
-  if(e.target.closest('.flipbtn')) return;
+  if(e.target.closest('.flipbtn') || e.target.closest('.reportbtn')) return;
   // Check if touch started inside a scrollable cardbody — preserve native scroll for long text
   const cb = e.target.closest('.cardbody');
   if(cb && cb.scrollHeight > cb.clientHeight + 2){
@@ -551,8 +579,6 @@ topCard.addEventListener('pointermove', (e)=>{
   if(lockedAxis==='x' || (!lockedAxis && Math.abs(dx) > Math.abs(dy))){
     if(dx < -hoverX){ if(zones.review) zones.review.classList.add('on'); if(trays.review) trays.review.className='tray hover-review'; if(dx>-36 && navigator.vibrate) navigator.vibrate(10); }
     else if(dx > hoverX){ if(zones.mastered) zones.mastered.classList.add('on'); if(trays.mastered) trays.mastered.className='tray hover-mastered'; if(dx<36 && navigator.vibrate) navigator.vibrate(10); }
-  } else if(lockedAxis==='y' || dy > hoverY){
-    if(dy > hoverY && Math.abs(dy) > Math.abs(dx)){ if(zones.catalog) zones.catalog.classList.add('on'); if(trays.catalog) trays.catalog.className='tray hover-catalog'; }
   }
 }, {passive:false});
 topCard.addEventListener('pointerup', (e)=>{
@@ -588,12 +614,11 @@ topCard.addEventListener('pointerup', (e)=>{
     dx=0; dy=0; lockedAxis=null; scrollableEl=null;
     return;
   }
-  const relX=84, relY=96;
+  const relX=84;
   const flick = Math.abs(vx) > 0.6;
   let filed=null;
   if((Math.abs(dx) > Math.abs(dy) && dx < -relX) || (flick && dx < -40 && lockedAxis==='x')) filed='review';
   else if((Math.abs(dx) > Math.abs(dy) && dx > relX) || (flick && dx > 40 && lockedAxis==='x')) filed='mastered';
-  else if(dy > relY && Math.abs(dy) > Math.abs(dx)) filed='catalog';
   if(filed) file(filed);
   else topCard.style.transform='';
   dx=0; dy=0; lockedAxis=null; scrollableEl=null;
@@ -610,8 +635,9 @@ async function file(kind){
   if(replayMode || isSeedShelf()) return; // disabled in replay and for demo seeds
   const card=currentCard();
   if(!card) return;
-  const moves={ review:'translateX(-160%) rotate(-16deg)', mastered:'translateX(160%) rotate(16deg)', catalog:'translateY(160%) scale(.85)' };
-  const pulse={ review:'pulse-review', catalog:'pulse-catalog', mastered:'pulse-mastered' };
+  const moves={ review:'translateX(-160%) rotate(-16deg)', mastered:'translateX(160%) rotate(16deg)' };
+  const pulse={ review:'pulse-review', mastered:'pulse-mastered' };
+  if(!moves[kind]) return;
   topCard.style.transition='transform .38s cubic-bezier(.2,0,0,1), opacity .32s';
   topCard.style.transform=moves[kind];
   topCard.style.opacity='0';
@@ -670,6 +696,7 @@ window.toggleTheme = toggleTheme;
 // expose for HTML onclick
 window.flipCard=flipCard;
 window.file=file;
+window.reportWrongCard=reportWrongCard;
 
 function isDeckOpen(){
   return !!(bookView && bookView.style.display!=='none');

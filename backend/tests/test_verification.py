@@ -67,6 +67,19 @@ def _wrong_code(code: str) -> str:
     return "000000" if code != "000000" else "111111"
 
 
+def test_signup_rejects_short_password(client_ctx, sent_codes):
+    response = client_ctx.post(
+        "/api/v1/auth/signup",
+        json={
+            "name": "NIE Student",
+            "email": _nie_email(),
+            "password": "short7x",
+        },
+    )
+    assert response.status_code == 422
+    assert sent_codes == []
+
+
 def test_signup_rejects_non_nie_domains(client_ctx):
     for email in (
         "student@example.com",

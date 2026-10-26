@@ -1,7 +1,6 @@
 """InstaClone FastAPI server for rendering pipeline feed delivery."""
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,17 +11,40 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+try:
+    from instaclone.posts_store import (
+        increment_interaction,
+        init_posts_db,
+        is_cloudinary_url,
+        list_posts,
+        upsert_post,
+    )
+except ModuleNotFoundError:
+    from posts_store import (
+        increment_interaction,
+        init_posts_db,
+        is_cloudinary_url,
+        list_posts,
+        upsert_post,
+    )
+
 BASE_DIR = Path(__file__).resolve().parent
-DATA_FILE = BASE_DIR / "data" / "posts.json"
 STATIC_DIR = BASE_DIR / "static"
 FEED_HTML = BASE_DIR / "feed.html"
 DATA_DIR = BASE_DIR / "data"
 SLIDES_DIR = DATA_DIR / "slides"
 
+try:
+    from dotenv import load_dotenv
+    for _env_file in (BASE_DIR / ".env", BASE_DIR.parent / "backend" / ".env"):
+        if _env_file.exists():
+            load_dotenv(_env_file)
+except ImportError:
+    pass
+
 app = FastAPI(title="StudyReel InstaClone", version="0.1.0")
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-# Publisher copies PNGs to instaclone/data/slides/{post_id}/ and expects /slides/{post_id}/slide_*.png
 SLIDES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/slides", StaticFiles(directory=str(SLIDES_DIR)), name="slides")
 
@@ -52,61 +74,28 @@ class InteractRequest(BaseModel):
     action: Literal["like", "view"]
 
 
-def load_posts() -> List[Dict[str, Any]]:
-    if not DATA_FILE.exists():
-        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-        DATA_FILE.write_text("[]", encoding="utf-8")
-        return []
-    try:
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-
-
-def save_posts(posts: List[Dict[str, Any]]) -> None:
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    DATA_FILE.write_text(json.dumps(posts, indent=2), encoding="utf-8")
+@app.on_event("startup")
+def _startup() -> None:
+    init_posts_db()
 
 
 @app.post("/api/posts", status_code=status.HTTP_200_OK)
 def create_post(payload: CreatePostRequest) -> Dict[str, str]:
-    posts = load_posts()
-    post_dict = payload.model_dump()
-    existing_idx = next((i for i, p in enumerate(posts) if p.get("post_id") == payload.post_id), None)
-    now_iso = datetime.now(timezone.utc).isoformat()
+    if any(not is_cloudinary_url(slide.image_path) for slide in payload.slides):
+        raise HTTPException(status_code=400, detail="Slide images must be Cloudinary URLs")
 
-    if existing_idx is not None:
-        existing = posts[existing_idx]
-        post_dict["likes"] = existing.get("likes", 0)
-        post_dict["views"] = existing.get("views", 0)
-        post_dict["created_at"] = existing.get("created_at", now_iso)
-        posts[existing_idx] = post_dict
-    else:
-        post_dict["likes"] = 0
-        post_dict["views"] = 0
-        post_dict["created_at"] = now_iso
-        posts.append(post_dict)
-
-    save_posts(posts)
+    post = payload.model_dump()
+    post["media_id"] = payload.post_id
+    upsert_post(post)
     return {"media_id": payload.post_id, "feed_url": f"http://127.0.0.1:8100/feed#{payload.post_id}"}
 
 
 @app.post("/api/posts/{media_id}/interact", status_code=status.HTTP_200_OK)
 def interact_post(media_id: str, payload: InteractRequest) -> Dict[str, int]:
-    posts = load_posts()
-    post = next((p for p in posts if p.get("post_id") == media_id or p.get("media_id") == media_id), None)
-    if not post:
+    counts = increment_interaction(media_id, payload.action)
+    if counts is None:
         raise HTTPException(status_code=404, detail="Post not found")
-
-    if payload.action == "like":
-        post["likes"] = post.get("likes", 0) + 1
-    elif payload.action == "view":
-        post["views"] = post.get("views", 0) + 1
-    else:
-        raise HTTPException(status_code=400, detail="Invalid action")
-
-    save_posts(posts)
-    return {"likes": post["likes"], "views": post["views"]}
+    return counts
 
 
 @app.get("/api/feed")
@@ -114,7 +103,7 @@ def get_feed(
     sort: str = Query(default="newest", description="trending|newest"),
     tag: Optional[str] = Query(default=None, description="filter by hashtag without #"),
 ) -> Dict[str, List[Dict[str, Any]]]:
-    posts = load_posts()
+    posts = list_posts()
     if tag:
         t = tag.lower().lstrip("#")
         posts = [p for p in posts if any(h.lower().lstrip("#") == t for h in p.get("hashtags", []))]

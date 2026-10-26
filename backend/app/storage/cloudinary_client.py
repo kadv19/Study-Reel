@@ -5,8 +5,8 @@ Credentials from env vars:
   CLOUDINARY_API_KEY
   CLOUDINARY_API_SECRET
 
-Gracefully handles missing/empty credentials: upload is skipped and "" is
-returned, so callers can fall back to local file path without crashing.
+Gracefully handles missing/empty credentials by returning "", allowing
+callers to fail without crashing.
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ def _configure():
 def upload_image(local_path: Path, public_id: str) -> str:
     """Upload a local PNG to Cloudinary and return the secure CDN URL.
 
-    Returns "" if Cloudinary is not configured or the upload fails — caller
-    should treat empty string as 'no cloud_url' and fall back to local path.
+    Returns "" if Cloudinary is not configured or the upload fails. Callers
+    that require Cloudinary URLs must treat an empty string as failure.
     """
     if not _is_configured():
         return ""

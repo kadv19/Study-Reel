@@ -3,30 +3,43 @@
 import io
 import uuid
 import zipfile
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.auth import current_user
 from app.db.database import (
+    count_active_jobs,
+    count_syllabi_since,
+    create_job,
     get_carousel,
     get_carousel_owner,
+    get_job_for_user,
+    get_job_queue_position,
+    get_latest_job,
     get_module,
-    get_pipeline_state,
-    get_resource_text_for_syllabus,
     init_db,
     save_carousel,
     save_syllabus,
-    set_pipeline_state,
+    update_job,
 )
 from app.engine.gemini_client import generate_topics_for_module
 from app.ingestion.parser import extract_text
 from app.ingestion.pipeline import process_pdf
+from app.jobs import (
+    job_gate,
+    limits_lock,
+    max_active_jobs_per_user,
+    max_syllabi_per_day,
+)
 from app.renderer.render import render_carousel
 from app.schemas import Carousel, MicroTopic, Slide, Syllabus
 from app.api_v2 import router as api_v2_router, start_scheduler
@@ -59,6 +72,73 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 RENDER_DIR.mkdir(exist_ok=True)
 
 
+def _idle_job(owner_user_id: str) -> dict:
+    return {
+        "id": None,
+        "job_id": None,
+        "owner_user_id": owner_user_id,
+        "stage": None,
+        "state": "IDLE",
+        "progress": 0.0,
+        "message": "No jobs yet",
+        "created_at": None,
+        "updated_at": None,
+        "queue_position": 0,
+        "position": 0,
+    }
+
+
+def _enforce_job_limits(owner_user_id: str, check_daily_syllabi: bool = False) -> None:
+    if count_active_jobs(owner_user_id) >= max_active_jobs_per_user():
+        raise HTTPException(
+            status_code=429,
+            detail="You already have an active job. Please wait for it to finish.",
+        )
+    if check_daily_syllabi:
+        limit = max_syllabi_per_day()
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        if count_syllabi_since(owner_user_id, since) >= limit:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Daily limit reached: you can upload {limit} syllabi per day. "
+                    "Please try again tomorrow."
+                ),
+            )
+
+
+@contextmanager
+def _job_slot(job_id: int, stage: str, message: str):
+    if not job_gate.try_acquire():
+        position = get_job_queue_position(job_id)
+        update_job(
+            job_id,
+            "QUEUED",
+            stage,
+            0.0,
+            f"Queued — position {position}",
+        )
+        job_gate.acquire()
+    try:
+        update_job(job_id, "PROCESSING", stage, 0.2, message)
+        yield
+    finally:
+        job_gate.release()
+
+
+def _create_job(
+    owner_user_id: str,
+    stage: str,
+    state: str,
+    progress: float,
+    message: str,
+    check_daily_syllabi: bool = False,
+) -> dict:
+    with limits_lock:
+        _enforce_job_limits(owner_user_id, check_daily_syllabi=check_daily_syllabi)
+        return create_job(owner_user_id, stage, state, progress, message)
+
+
 class CarouselRenderRequest(BaseModel):
     """Approved topics (post-HITL) ready to render into a carousel."""
 
@@ -87,8 +167,22 @@ def health() -> dict:
 
 
 @app.get("/api/v1/status")
-def status(user: dict = Depends(current_user)) -> dict:
-    return get_pipeline_state()
+def status(job_id: int | None = None, user: dict = Depends(current_user)) -> dict:
+    if job_id is not None:
+        job = get_job_for_user(job_id, user["id"])
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+    else:
+        job = get_latest_job(user["id"])
+    if not job:
+        return _idle_job(user["id"])
+    position = get_job_queue_position(job["id"]) if job["state"] == "QUEUED" else 0
+    return {
+        **job,
+        "job_id": job["id"],
+        "queue_position": position,
+        "position": position,
+    }
 
 
 @app.post("/api/v1/syllabus/upload", response_model=Syllabus)
@@ -101,37 +195,63 @@ async def upload_syllabus(
     owner = user["id"]
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    if resource_file and resource_file.filename and not resource_file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Resource file must be a PDF")
 
-    set_pipeline_state("PROCESSING", "ingestion", 0.1, f"Uploading {file.filename}")
+    job = _create_job(
+        owner,
+        "ingestion",
+        "PROCESSING",
+        0.1,
+        f"Uploading {file.filename}",
+        check_daily_syllabi=True,
+    )
 
     dest = UPLOAD_DIR / f"{uuid.uuid4().hex}_{file.filename}"
     dest.write_bytes(await file.read())
 
     resource_text: str | None = None
     if resource_file and resource_file.filename:
-        if not resource_file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="Resource file must be a PDF")
         rdest = UPLOAD_DIR / f"{uuid.uuid4().hex}_{resource_file.filename}"
         rdest.write_bytes(await resource_file.read())
         try:
-            resource_text = extract_text(rdest)
+            resource_text = await run_in_threadpool(extract_text, rdest)
             # cap to avoid huge prompt
             if len(resource_text) > 8000:
                 resource_text = resource_text[:8000]
         except Exception as exc:
             # non-fatal: keep resource_text None but log
             resource_text = None
-            set_pipeline_state("PROCESSING", "ingestion", 0.15, f"Resource parse warning: {exc}")
+            update_job(
+                job["id"],
+                "PROCESSING",
+                "ingestion",
+                0.15,
+                f"Resource parse warning: {exc}",
+            )
 
     try:
-        syllabus = process_pdf(dest)
+        syllabus = await run_in_threadpool(process_pdf, dest)
         syllabus.file_name = file.filename  # return the original name, not the stored one
     except Exception as exc:
-        set_pipeline_state("FAILED", "ingestion", 0.0, str(exc))
+        update_job(job["id"], "FAILED", "ingestion", 0.0, str(exc))
         raise HTTPException(status_code=422, detail=f"Ingestion failed: {exc}") from exc
 
-    syllabus_id = save_syllabus(syllabus, owner_user_id=owner, resource_text=resource_text)
-    set_pipeline_state("DONE", "ingestion", 1.0, f"Extracted {len(syllabus.modules)} modules (id={syllabus_id})")
+    try:
+        syllabus_id = await run_in_threadpool(
+            save_syllabus, syllabus, owner_user_id=owner, resource_text=resource_text
+        )
+    except Exception as exc:
+        update_job(job["id"], "FAILED", "ingestion", 0.0, f"Save failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Save failed: {exc}") from exc
+
+    update_job(
+        job["id"],
+        "DONE",
+        "ingestion",
+        1.0,
+        f"Extracted {len(syllabus.modules)} modules (id={syllabus_id})",
+    )
 
     return syllabus
 
@@ -155,20 +275,23 @@ def generate_module_topics(
     module_text = "\n".join(module["topic_strings"])
     title = module.get("module_title") or f"Module {module_number}"
 
-    set_pipeline_state("PROCESSING", "generation", 0.2, f"Generating topics for {title}")
+    job = _create_job(user["id"], "generation", "QUEUED", 0.0, f"Queued for {title}")
 
     try:
-        topics = generate_topics_for_module(module_text)
-    except HTTPException:
-        # Preserve explicit HTTP errors from the engine (e.g. 503 when Gemini
-        # is at capacity and no Ollama fallback is configured).
+        with _job_slot(job["id"], "generation", f"Generating topics for {title}"):
+            topics = generate_topics_for_module(module_text)
+    except HTTPException as exc:
+        update_job(job["id"], "FAILED", "generation", 0.0, f"Generation failed: {exc.detail}")
         raise
     except Exception as exc:
-        set_pipeline_state("FAILED", "generation", 0.0, f"Generation failed: {exc}")
+        update_job(job["id"], "FAILED", "generation", 0.0, f"Generation failed: {exc}")
         raise HTTPException(status_code=502, detail=f"Generation failed: {exc}") from exc
 
-    set_pipeline_state(
-        "DONE", "generation", 1.0,
+    update_job(
+        job["id"],
+        "DONE",
+        "generation",
+        1.0,
         f"Generated {len(topics)} topics for {title}",
     )
     return topics
@@ -195,26 +318,33 @@ def generate_module_topics_post(
     # resource_text is stored per syllabus; get_module now returns it
     resource_text = record.get("resource_text")
 
-    set_pipeline_state("PROCESSING", "generation", 0.2, f"Generating topics for {title} [{req.depth_format}/{req.tone} ×{req.slide_count}]")
+    job = _create_job(user["id"], "generation", "QUEUED", 0.0, f"Queued for {title}")
 
     try:
-        topics = generate_topics_for_module(
-            module_text,
-            depth_format=req.depth_format,
-            tone=req.tone,
-            slide_count=req.slide_count,
-            resource_text=resource_text,
-        )
-    except HTTPException:
-        # Preserve explicit HTTP errors from the engine (e.g. 503 when Gemini
-        # is at capacity and no Ollama fallback is configured).
+        with _job_slot(
+            job["id"],
+            "generation",
+            f"Generating topics for {title} [{req.depth_format}/{req.tone} ×{req.slide_count}]",
+        ):
+            topics = generate_topics_for_module(
+                module_text,
+                depth_format=req.depth_format,
+                tone=req.tone,
+                slide_count=req.slide_count,
+                resource_text=resource_text,
+            )
+    except HTTPException as exc:
+        update_job(job["id"], "FAILED", "generation", 0.0, f"Generation failed: {exc.detail}")
         raise
     except Exception as exc:
-        set_pipeline_state("FAILED", "generation", 0.0, f"Generation failed: {exc}")
+        update_job(job["id"], "FAILED", "generation", 0.0, f"Generation failed: {exc}")
         raise HTTPException(status_code=502, detail=f"Generation failed: {exc}") from exc
 
-    set_pipeline_state(
-        "DONE", "generation", 1.0,
+    update_job(
+        job["id"],
+        "DONE",
+        "generation",
+        1.0,
         f"Generated {len(topics)} topics for {title}",
     )
     return topics
@@ -249,18 +379,25 @@ def render_approved_carousel(
     if module_id is None:
         raise HTTPException(status_code=400, detail="Upload a syllabus before rendering a carousel")
 
-    set_pipeline_state("PROCESSING", "rendering", 0.3, f"Rendering {len(slides)} slides")
+    job = _create_job(
+        owner, "rendering", "QUEUED", 0.0, f"Queued to render {len(slides)} slides"
+    )
 
     out_dir = RENDER_DIR / carousel.carousel_id
     try:
-        pngs = render_carousel(carousel, out_dir=out_dir)
+        with _job_slot(job["id"], "rendering", f"Rendering {len(slides)} slides"):
+            update_job(job["id"], "PROCESSING", "rendering", 0.3, f"Rendering {len(slides)} slides")
+            pngs = render_carousel(carousel, out_dir=out_dir)
+            carousel_db_id = save_carousel(carousel, module_id, output_dir=str(out_dir))
     except Exception as exc:
-        set_pipeline_state("FAILED", "rendering", 0.0, f"Rendering failed: {exc}")
+        update_job(job["id"], "FAILED", "rendering", 0.0, f"Rendering failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Rendering failed: {exc}") from exc
 
-    carousel_db_id = save_carousel(carousel, module_id, output_dir=str(out_dir))
-    set_pipeline_state(
-        "DONE", "rendering", 1.0,
+    update_job(
+        job["id"],
+        "DONE",
+        "rendering",
+        1.0,
         f"Rendered {len(pngs)} slides (carousel id={carousel_db_id})",
     )
     return {

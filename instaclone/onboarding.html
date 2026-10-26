@@ -49,7 +49,7 @@
   /* --- Step 1: intro --- */
   .introglyph{font-family:'Fraunces',serif; font-size:64px; text-align:center; margin:30px 0 10px; opacity:.9;}
 
-  /* --- Step 2/3/4: swipe demo --- */
+  /* --- Step 1/2: swipe demo --- */
   .demoarea{position:relative; flex:1; display:flex; align-items:center; justify-content:center;}
   .democard{
     width:190px; height:230px; border-radius:12px; background-color:var(--card); color:var(--card-ink);
@@ -67,17 +67,14 @@
   }
   .lbl-review{left:8px; top:50%; transform:translateY(-50%) translateX(-10px); background:rgba(251,191,36,.18); color:var(--amber); border:1px solid rgba(251,191,36,.4);}
   .lbl-mastered{right:8px; top:50%; transform:translateY(-50%) translateX(10px); background:rgba(52,211,153,.18); color:var(--green); border:1px solid rgba(52,211,153,.4);}
-  .lbl-catalog{left:50%; bottom:10px; transform:translateX(-50%) translateY(10px); background:rgba(56,189,248,.18); color:var(--cyan); border:1px solid rgba(56,189,248,.4);}
   .demolabel.show{opacity:1; transform:translate(0,0) translateY(-50%);}
-  .lbl-catalog.show{transform:translateX(-50%) translateY(0);}
 
   .arrowhint{position:absolute; font-size:26px; opacity:0; transition:opacity .3s;}
   .arrowhint.show{opacity:.8;}
   .ah-left{left:26px; top:50%; transform:translateY(-50%); color:var(--amber);}
   .ah-right{right:26px; top:50%; transform:translateY(-50%); color:var(--green);}
-  .ah-down{left:50%; bottom:36px; transform:translateX(-50%); color:var(--cyan);}
 
-  /* --- Step 5: nav tour --- */
+  /* --- Step 4: nav tour --- */
   .navmock{display:flex; justify-content:center; margin-top:8px;}
   .plank{display:flex; gap:4px; padding:6px; border-radius:10px; background:linear-gradient(160deg, var(--wood-1), var(--wood-2)); box-shadow:0 6px 16px rgba(0,0,0,.35);}
   .navbtn{font-family:'Fraunces',serif; font-weight:600; font-size:12px; color:#f2e9d3; padding:8px 12px; border-radius:7px; position:relative; transition:background .3s;}
@@ -126,10 +123,10 @@
       </div>
     </div>
 
-    <!-- Step 2: mastered (right) -->
+    <!-- Step 2: got it (right) -->
     <div class="stage" data-step="2">
       <h2>Know it cold?</h2>
-      <p class="sub">Send it right, into Mastered. Your shelf fills in.</p>
+      <p class="sub">Send it right, into Got it. Your shelf fills in.</p>
       <div class="demoarea">
         <span class="arrowhint ah-right" id="ah2">→</span>
         <div class="democard" id="card2">
@@ -137,27 +134,12 @@
           <h4>Round Robin Scheduling</h4>
           <div class="body">Each process gets a fixed time quantum...</div>
         </div>
-        <div class="demolabel lbl-mastered" id="lbl2">Mastered</div>
+        <div class="demolabel lbl-mastered" id="lbl2">Got it</div>
       </div>
     </div>
 
-    <!-- Step 3: catalog (down) -->
+    <!-- Step 3: flip -->
     <div class="stage" data-step="3">
-      <h2>Just curious?</h2>
-      <p class="sub">Push it down, into Catalog. No pressure, keep it for later.</p>
-      <div class="demoarea">
-        <span class="arrowhint ah-down" id="ah3">↓</span>
-        <div class="democard" id="card3">
-          <span class="tag">AI · GLOBAL</span>
-          <h4>Attention Is All You Need</h4>
-          <div class="body">Each token attends to every other token...</div>
-        </div>
-        <div class="demolabel lbl-catalog" id="lbl3">Catalog</div>
-      </div>
-    </div>
-
-    <!-- Step 4: flip -->
-    <div class="stage" data-step="4">
       <h2>Every card has a back</h2>
       <p class="sub">Tap "flip" for the exam angle — why it's actually asked.</p>
       <div class="demoarea">
@@ -169,8 +151,8 @@
       </div>
     </div>
 
-    <!-- Step 5: nav tour -->
-    <div class="stage" data-step="5">
+    <!-- Step 4: nav tour -->
+    <div class="stage" data-step="4">
       <h2>Three places you'll live</h2>
       <p class="sub">&nbsp;</p>
       <div class="navmock">
@@ -186,8 +168,8 @@
       </div>
     </div>
 
-    <!-- Step 6: done -->
-    <div class="stage" data-step="6">
+    <!-- Step 5: done -->
+    <div class="stage" data-step="5">
       <div class="introglyph">✓</div>
       <h2 style="text-align:center">That's the whole tour</h2>
       <p class="sub" style="text-align:center">Go pull your first book off the shelf.</p>
@@ -201,7 +183,7 @@
 </div>
 
 <script>
-const TOTAL_STEPS = 7; // 0..6
+const TOTAL_STEPS = 6; // 0..5
 let step = 0;
 let autoTimer = null;
 
@@ -267,14 +249,6 @@ function runStepAnimation(n){
     }, 300);
   }
   if(n === 3){
-    const card = document.getElementById('card3'), ah = document.getElementById('ah3'), lbl = document.getElementById('lbl3');
-    card.style.transform = ''; ah.classList.remove('show'); lbl.classList.remove('show');
-    autoTimer = setTimeout(()=>{
-      ah.classList.add('show');
-      setTimeout(()=>{ lbl.classList.add('show'); card.style.transform = 'translateY(40px) scale(.94)'; }, 350);
-    }, 300);
-  }
-  if(n === 4){
     const card = document.getElementById('card4');
     const tag = document.getElementById('tag4'), h = document.getElementById('h4'), b = document.getElementById('body4');
     card.style.transform = '';
@@ -289,11 +263,11 @@ function runStepAnimation(n){
       }, 500);
     }, 500);
   }
-  if(n === 5){
+  if(n === 4){
     const items = [
       {id:'nav-lib', title:'Library', desc:"Every book you've uploaded, shelved by module."},
       {id:'nav-up', title:'Upload PDF', desc:'Drop a new syllabus in — it becomes a book on your shelf.'},
-      {id:'nav-cab', title:'My Cabinet', desc:'Everything you filed — Review, Catalog, and Mastered, in one place.'}
+      {id:'nav-cab', title:'My Cabinet', desc:'Everything you filed — Review and Got it, in one place.'}
     ];
     document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('spot'));
     let i = 0;

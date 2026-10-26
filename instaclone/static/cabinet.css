@@ -255,7 +255,6 @@ body{
 .preview-status .dot{width:5px; height:5px; border-radius:50%; background:var(--muted);}
 .preview-status.review .dot{background:var(--rose);}
 .preview-status.mastered .dot{background:var(--green);}
-.preview-status.catalog .dot{background:var(--cyan);}
 .preview-status.unfiled .dot{background:var(--amber);}
 .preview-label{
   padding:9px 11px 10px; font-size:10px; font-weight:600; line-height:1.3;
@@ -335,8 +334,8 @@ body{
   white-space:pre-wrap; word-break:break-word;
 }
 .cardfoot{
-  display:flex; justify-content:space-between; align-items:center; padding:10px 20px 18px 42px;
-  font-size:11px; opacity:.65; border-top:1px dashed rgba(0,0,0,.15);
+  display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:10px 20px 18px 42px; font-size:11px; opacity:.65; border-top:1px dashed rgba(0,0,0,.15);
 }
 .weight{display:flex; align-items:center; gap:4px;}
 .weight .dot{width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.3;}
@@ -346,6 +345,13 @@ body{
   cursor:pointer; font-weight:700; padding:10px 14px; border-radius:20px;
   display:flex; align-items:center; gap:5px; min-height:44px; min-width:44px; justify-content:center;
 }
+.cardactions{display:flex; align-items:center; gap:6px;}
+.reportbtn{
+  background:rgba(165,55,47,.1); border:none; color:#a5372f; font-size:10.5px;
+  cursor:pointer; font-weight:700; padding:10px; border-radius:20px; min-height:44px;
+  display:flex; align-items:center; justify-content:center; touch-action:manipulation;
+}
+.reportbtn:disabled{opacity:.6; cursor:default;}
 .diagram{margin:6px 0 10px;}
 .diagram-node{
   background:var(--surface); border:1px solid var(--border); color:var(--text);

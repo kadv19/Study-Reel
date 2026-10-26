@@ -85,6 +85,27 @@ function setBtnLoading(btn, loading, text){
   }
 }
 
+function togglePassword(event, btn){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if(!btn) return;
+  const input = document.getElementById(btn.dataset.target);
+  if(!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.classList.toggle('is-visible', show);
+  btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+  btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  btn.setAttribute('title', show ? 'Hide password' : 'Show password');
+  const end = input.value.length;
+  try{
+    input.focus({preventScroll:true});
+    input.setSelectionRange(end, end);
+  }catch{}
+}
+
 function showFormError(id, msg){
   const el = document.getElementById(id);
   if(!el) return;
@@ -250,8 +271,8 @@ async function handleSignup(e){
     if(emailEl) emailEl.focus();
     return;
   }
-  if(!password || password.length < 6){
-    showFormError('suError', 'Password must be at least 6 characters.');
+  if(!password || password.length < 8){
+    showFormError('suError', 'Password must be at least 8 characters.');
     showFailInk('front');
     if(pwEl) pwEl.focus();
     return;
@@ -453,6 +474,7 @@ window.showSuccessInk = showSuccessInk;
 window.showFailInk = showFailInk;
 window.showVerifyView = showVerifyView;
 window.hideVerifyView = hideVerifyView;
+window.togglePassword = togglePassword;
 
 function bindEnterToStamp(){
   const suIds = ['suName','suEmail','suPassword'];
@@ -490,9 +512,18 @@ function bindEnterToStamp(){
   }
 }
 
+function bindPasswordToggles(){
+  document.querySelectorAll('.eyebtn').forEach((btn) => {
+    ['pointerdown', 'pointerup', 'touchstart', 'touchend'].forEach((name) => {
+      btn.addEventListener(name, (event) => event.stopPropagation(), {passive:true});
+    });
+  });
+}
+
 function initAuthUi(){
   bindEnterToStamp();
   bindVerifyControls();
+  bindPasswordToggles();
 }
 
 if(document.readyState === 'loading'){

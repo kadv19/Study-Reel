@@ -78,3 +78,48 @@ def test_oauth_simulated_lifecycle(tmp_path):
     assert tok["token"]
     clear_oauth_token(db)
     assert is_oauth_connected(db) is False
+
+
+def test_instaclone_publisher_uses_cloudinary_urls(monkeypatch, tmp_path):
+    from app.publisher.instaclone import InstaClonePublisher
+    from app.schemas import PostMetadata
+
+    cloud_url = "https://res.cloudinary.com/demo/image/upload/slide_01.png"
+    (tmp_path / "cloud_urls.json").write_text(json.dumps([cloud_url]))
+    captured = {}
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"media_id": "m1", "feed_url": "http://x/feed"}
+
+    def fake_post(url, json, timeout):
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr("app.publisher.instaclone.requests.post", fake_post)
+    metadata = PostMetadata(caption="Caption", hashtags=["#a", "#b", "#c"])
+    result = InstaClonePublisher("http://clone").publish(
+        _sample_carousel(1), metadata, tmp_path
+    )
+
+    assert result.media_id == "m1"
+    assert captured["json"]["slides"][0]["image_path"] == cloud_url
+
+
+def test_instaclone_publisher_refuses_local_slide(monkeypatch, tmp_path):
+    from app.publisher.instaclone import InstaClonePublisher
+    from app.schemas import PostMetadata
+
+    (tmp_path / "slide_01.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    monkeypatch.setattr("app.publisher.instaclone.upload_image", lambda *_: "")
+    metadata = PostMetadata(caption="Caption", hashtags=["#a", "#b", "#c"])
+
+    with pytest.raises(RuntimeError, match="Cloudinary"):
+        InstaClonePublisher("http://clone").publish(
+            _sample_carousel(1), metadata, tmp_path
+        )

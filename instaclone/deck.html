@@ -121,11 +121,14 @@
   .cardbody h2{font-family:'Fraunces',serif; font-size:25px; font-weight:600; margin:6px 0 10px; letter-spacing:-0.01em; line-height:1.15;}
   .cardbody p{font-size:14.5px; line-height:1.6; opacity:.78; margin:0 0 14px;}
   .code{font-size:12px; padding:11px 13px; border-radius:8px; background:rgba(0,0,0,.85); color:#9ece6a; line-height:1.55; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); white-space:pre-wrap; word-break:break-word;}
-  .cardfoot{display:flex; justify-content:space-between; align-items:center; padding:10px 20px 18px 42px; font-size:11px; opacity:.65; border-top:1px dashed rgba(0,0,0,.15);}
+  .cardfoot{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 20px 18px 42px; font-size:11px; opacity:.65; border-top:1px dashed rgba(0,0,0,.15);}
   .weight{display:flex; align-items:center; gap:4px;}
   .weight .dot{width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.3;}
   .weight .dot.on{opacity:1;}
   .flipbtn{background:rgba(0,0,0,.06); border:none; color:var(--card-ink); font-size:11px; cursor:pointer; font-weight:700; padding:10px 14px; border-radius:20px; display:flex; align-items:center; gap:5px; min-height:44px; min-width:44px; justify-content:center;}
+  .cardactions{display:flex; align-items:center; gap:6px;}
+  .reportbtn{background:rgba(165,55,47,.1); border:none; color:#a5372f; font-size:10.5px; cursor:pointer; font-weight:700; padding:10px 10px; border-radius:20px; min-height:44px; display:flex; align-items:center; justify-content:center; touch-action:manipulation;}
+  .reportbtn:disabled{opacity:.6; cursor:default;}
   .zonehint{position:absolute; inset:0; border-radius:12px; display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:600; font-size:20px; opacity:0; pointer-events:none; transition:opacity .12s; z-index:4;}
   .zonehint.on{opacity:1;}
   .trays{display:flex; gap:10px; margin-top:16px;}
@@ -133,10 +136,8 @@
   .tray .icon{font-size:17px; display:block; margin-bottom:4px;}
   .tray .lbl{font-size:11.5px; font-weight:600;}
   .tray.hover-review{transform:scale(1.06); border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 25%, transparent);}
-  .tray.hover-catalog{transform:scale(1.06); border-color:var(--cyan); box-shadow:0 0 0 3px color-mix(in srgb, var(--cyan) 25%, transparent);}
   .tray.hover-mastered{transform:scale(1.06); border-color:var(--green); box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent);}
   .tray.pulse-review{animation:pulseTray .5s; background:color-mix(in srgb, var(--amber) 14%, var(--surface));}
-  .tray.pulse-catalog{animation:pulseTray .5s; background:color-mix(in srgb, var(--cyan) 14%, var(--surface));}
   .tray.pulse-mastered{animation:pulseTray .5s; background:color-mix(in srgb, var(--green) 14%, var(--surface));}
   @keyframes pulseTray{0%{transform:scale(1)}40%{transform:scale(1.1)}100%{transform:scale(1)}}
   .dragtip{text-align:center; font-size:11.5px; color:var(--muted); margin-top:12px; display:flex; align-items:center; justify-content:center; gap:6px;}
@@ -219,7 +220,6 @@
       <div class="card back2" id="back2"></div>
       <div class="card top" id="topCard">
         <div class="zonehint" id="zoneReview" style="background:color-mix(in srgb, var(--amber) 30%, transparent); color:#7a5200;">Review</div>
-        <div class="zonehint" id="zoneCatalog" style="background:color-mix(in srgb, var(--cyan) 30%, transparent); color:#00506b;">Catalog</div>
         <div class="zonehint" id="zoneMastered" style="background:color-mix(in srgb, var(--green) 30%, transparent); color:#0a5c3d;">Got it</div>
         <div class="zonehint" id="zoneReplay" style="background:color-mix(in srgb, var(--indigo) 30%, transparent); color:#2a1a6a;">Replay ↑</div>
         <div class="flipinner" id="flipInner">
@@ -230,7 +230,6 @@
     </div>
     <div class="trays">
       <div class="tray" id="trayReview" onclick="file('review')"><span class="icon">↺</span><span class="lbl">Review</span></div>
-      <div class="tray" id="trayCatalog" onclick="file('catalog')"><span class="icon">⊙</span><span class="lbl">Catalog</span></div>
       <div class="tray" id="trayMastered" onclick="file('mastered')"><span class="icon">✓</span><span class="lbl">Got it</span></div>
     </div>
     <div class="dragtip" id="dragTip">try dragging the card toward a tray</div>
@@ -244,8 +243,8 @@
     <button class="logoutbtn" onclick="handleLogout()">Log out</button>
   </div>
 </div>
-<script src="/static/back-nav.js?v=1"></script>
-<script src="/static/deck.js?v=4"></script>
+<script src="/static/back-nav.js?v=2"></script>
+<script src="/static/deck.js?v=6"></script>
 <script>
 // Service worker was flagged as caching risk — unregister any existing and clear caches to prevent stale deck.js/deck.html on phone
 if('serviceWorker' in navigator){

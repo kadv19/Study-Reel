@@ -206,7 +206,6 @@ class MetadataPreviewRequest(BaseModel):
 class CardStatus(str):
     unfiled = "unfiled"
     review = "review"
-    catalog = "catalog"
     mastered = "mastered"
 
 
@@ -214,7 +213,7 @@ class UserCardState(BaseModel):
     user_id: str = Field(..., description="anon id or auth sub; no auth yet => X-User-Id fallback")
     post_id: str
     slide_index: int = Field(..., ge=0)
-    status: Literal["unfiled", "review", "catalog", "mastered"] = "unfiled"
+    status: Literal["unfiled", "review", "mastered"] = "unfiled"
     filed_at: Optional[str] = None
     last_shown_at: Optional[str] = None
 
@@ -222,7 +221,29 @@ class UserCardState(BaseModel):
 class FileCardRequest(BaseModel):
     post_id: str
     slide_index: int = Field(..., ge=0)
-    status: Literal["review", "catalog", "mastered"]
+    status: Literal["review", "mastered"]
+
+
+class ReportRequest(BaseModel):
+    card_id: str = Field(..., min_length=1, max_length=120)
+    user_id: Optional[str] = Field(None, max_length=120)
+    reason: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("card_id", "reason")
+    @classmethod
+    def strip_required_text(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+    @field_validator("user_id")
+    @classmethod
+    def strip_optional_user_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 # ---- Real authentication (NIE only) ---------------------------------------
@@ -273,7 +294,7 @@ class SignupRequest(BaseModel):
     college: Optional[str] = Field(
         None, description="Ignored; college is derived server-side from the email domain"
     )
-    password: str = Field(..., min_length=6, max_length=128)
+    password: str = Field(..., min_length=8, max_length=128)
 
     @field_validator("email")
     @classmethod

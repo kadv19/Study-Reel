@@ -25,6 +25,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8100:8100"
+    env_file:
+      - ./backend/.env
     volumes:
       - ./instaclone:/app
       - ./seed:/seed:ro

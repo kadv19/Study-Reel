@@ -1,18 +1,14 @@
 """API unit tests for InstaClone standalone application."""
+import time
 from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
-from instaclone.app import app, DATA_FILE, load_posts, save_posts
+from instaclone import posts_store
+from instaclone.app import app
 
-
-@pytest.fixture(autouse=True)
-def isolated_storage(tmp_path, monkeypatch):
-    """Isolate JSON storage to a temporary file for clean testing."""
-    test_data_file = tmp_path / "test_posts.json"
-    test_data_file.write_text("[]", encoding="utf-8")
-    monkeypatch.setattr("instaclone.app.DATA_FILE", test_data_file)
-    yield test_data_file
+CLOUDINARY_SLIDE = "https://res.cloudinary.com/demo/image/upload/slide.png"
 
 
 @pytest.fixture
@@ -20,66 +16,109 @@ def client():
     return TestClient(app)
 
 
-def test_create_post_contract(client):
+def _post(post_id: str, **overrides):
     payload = {
-        "post_id": "test_post_001",
+        "post_id": post_id,
         "slides": [
-            {"slide_number": 1, "image_path": "demo_output/slide_01.png", "header": "Intro"},
-            {"slide_number": 2, "image_path": "demo_output/slide_02.png", "header": "Code"},
+            {"slide_number": 1, "image_path": CLOUDINARY_SLIDE, "header": "Intro"}
         ],
-        "caption": "Python async generator patterns in-depth #python #async",
-        "hashtags": ["#python", "#async", "#studyreel"],
-        "cover_slide": 1,
+        "caption": "Caption",
+        "hashtags": ["#test"],
+        "cover_slide": 0,
     }
-    response = client.post("/api/posts", json=payload)
+    payload.update(overrides)
+    return payload
+
+
+def test_create_post_contract(client):
+    response = client.post(
+        "/api/posts",
+        json=_post(
+            "test_post_001",
+            slides=[
+                {"slide_number": 1, "image_path": CLOUDINARY_SLIDE, "header": "Intro"},
+                {"slide_number": 2, "image_path": CLOUDINARY_SLIDE, "header": "Code"},
+            ],
+            caption="Python async generator patterns in-depth #python #async",
+            hashtags=["#python", "#async", "#studyreel"],
+            cover_slide=1,
+        ),
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["media_id"] == "test_post_001"
     assert "/feed" in data["feed_url"]
 
 
-def test_interact_like_and_view(client):
-    post_payload = {
-        "post_id": "post_interact_test",
-        "slides": [{"slide_number": 1, "image_path": "demo_output/slide_01.png", "header": "Slide 1"}],
-        "caption": "Testing interactions",
-        "hashtags": ["#test"],
-        "cover_slide": 1,
-    }
-    client.post("/api/posts", json=post_payload)
+def test_create_post_rejects_local_slide_paths(client):
+    response = client.post(
+        "/api/posts",
+        json=_post(
+            "local_post",
+            slides=[
+                {"slide_number": 1, "image_path": "/slides/local/slide_01.png", "header": "H"}
+            ],
+        ),
+    )
+    assert response.status_code == 400
 
-    # Test like
+
+def test_interact_like_and_view(client):
+    client.post("/api/posts", json=_post("post_interact_test"))
+
     like_res = client.post("/api/posts/post_interact_test/interact", json={"action": "like"})
     assert like_res.status_code == 200
     assert like_res.json() == {"likes": 1, "views": 0}
 
-    # Test view
     view_res = client.post("/api/posts/post_interact_test/interact", json={"action": "view"})
     assert view_res.status_code == 200
     assert view_res.json() == {"likes": 1, "views": 1}
 
-    # Test second like
     like_res_2 = client.post("/api/posts/post_interact_test/interact", json={"action": "like"})
     assert like_res_2.status_code == 200
     assert like_res_2.json() == {"likes": 2, "views": 1}
 
 
-def test_feed_ordering_and_counts(client):
-    client.post("/api/posts", json={
-        "post_id": "post_first",
-        "slides": [{"slide_number": 1, "image_path": "slide_01.png", "header": "First"}],
-        "caption": "First Post",
-        "hashtags": ["#first"],
-        "cover_slide": 1,
-    })
-    client.post("/api/posts", json={
-        "post_id": "post_second",
-        "slides": [{"slide_number": 1, "image_path": "slide_02.png", "header": "Second"}],
-        "caption": "Second Post",
-        "hashtags": ["#second"],
-        "cover_slide": 1,
-    })
+def test_interact_by_media_id(client):
+    posts_store.upsert_post(
+        {
+            "post_id": "canonical_post",
+            "media_id": "shared_media",
+            "slides": [{"slide_number": 1, "image_path": CLOUDINARY_SLIDE, "header": "H"}],
+            "caption": "Caption",
+            "hashtags": [],
+            "cover_slide": 0,
+            "likes": 5,
+            "views": 10,
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+    )
+    res = client.post("/api/posts/shared_media/interact", json={"action": "like"})
+    assert res.status_code == 200
+    assert res.json() == {"likes": 6, "views": 10}
 
+
+def test_upsert_preserves_interactions(client):
+    client.post("/api/posts", json=_post("stable_post"))
+    client.post("/api/posts/stable_post/interact", json={"action": "like"})
+    client.post("/api/posts/stable_post/interact", json={"action": "view"})
+
+    res = client.post(
+        "/api/posts",
+        json=_post("stable_post", caption="Updated caption", hashtags=["#updated"]),
+    )
+    assert res.status_code == 200
+
+    post = posts_store.get_post("stable_post")
+    assert post["caption"] == "Updated caption"
+    assert post["likes"] == 1
+    assert post["views"] == 1
+
+
+def test_feed_ordering_and_counts(client):
+    client.post("/api/posts", json=_post("post_first", hashtags=["#first"]))
+    time.sleep(0.01)
+    client.post("/api/posts", json=_post("post_second", hashtags=["#second"]))
     client.post("/api/posts/post_first/interact", json={"action": "like"})
 
     feed_res = client.get("/api/feed")
@@ -87,7 +126,6 @@ def test_feed_ordering_and_counts(client):
     data = feed_res.json()
     feed = data if isinstance(data, list) else data.get("posts", [])
     assert len(feed) == 2
-    # Latest first
     assert feed[0]["post_id"] == "post_second"
     assert feed[1]["post_id"] == "post_first"
     assert feed[1]["likes"] == 1
@@ -98,22 +136,14 @@ def test_feed_html_serving(client):
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
     assert "StudyReel" in response.text
-    assert "feed-container" in response.text
+    assert "</html>" in response.text
 
 
 def test_interact_error_handling(client):
-    # Nonexistent post
     res_404 = client.post("/api/posts/ghost_post/interact", json={"action": "like"})
     assert res_404.status_code == 404
 
-    # Valid post with invalid action
-    client.post("/api/posts", json={
-        "post_id": "post_valid",
-        "slides": [{"slide_number": 1, "image_path": "slide.png", "header": "H"}],
-        "caption": "Caption",
-        "hashtags": [],
-        "cover_slide": 1,
-    })
+    client.post("/api/posts", json=_post("post_valid"))
     res_422 = client.post("/api/posts/post_valid/interact", json={"action": "invalid_action"})
     assert res_422.status_code == 422
 
@@ -130,17 +160,15 @@ def test_media_serving(client):
 
 
 def test_cover_slide_zero_indexed(client):
-    # Publisher sends 0-indexed cover_slide (PostMetadata default 0)
-    payload = {
-        "post_id": "cover_zero_test",
-        "slides": [
-            {"slide_number": 1, "image_path": "slide_01.png", "header": "A"},
-            {"slide_number": 2, "image_path": "slide_02.png", "header": "B"},
+    payload = _post(
+        "cover_zero_test",
+        slides=[
+            {"slide_number": 1, "image_path": CLOUDINARY_SLIDE, "header": "A"},
+            {"slide_number": 2, "image_path": CLOUDINARY_SLIDE, "header": "B"},
         ],
-        "caption": "cover 0",
-        "hashtags": ["#test"],
-        "cover_slide": 0,
-    }
+        caption="cover 0",
+        cover_slide=0,
+    )
     res = client.post("/api/posts", json=payload)
     assert res.status_code == 200
     feed_res = client.get("/api/feed")

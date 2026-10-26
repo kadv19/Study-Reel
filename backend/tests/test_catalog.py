@@ -5,6 +5,36 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas import MicroTopic
 
+
+def _make_carousel(tmp_path, make_user, slide_count=1):
+    from pathlib import Path
+
+    from app.db.database import get_module, save_carousel, save_syllabus
+    from app.schemas import Carousel, ExtractedModule, Slide, Syllabus
+
+    user, headers = make_user()
+    uid = user["id"]
+    syllabus = Syllabus(
+        file_name=f"catalog-{uid[:6]}.pdf",
+        total_pages=1,
+        modules=[ExtractedModule(module_number=1, module_title="Catalog Mod", topic_strings=["Topic A"])],
+    )
+    save_syllabus(syllabus, owner_user_id=uid)
+    module = get_module(1, owner_user_id=uid)
+    topics = [
+        MicroTopic(header=f"Front {i}", body=f"Body {i}", back_header=f"Back {i}", back_body=f"Back body {i}")
+        for i in range(slide_count)
+    ]
+    slides = [Slide(slide_type="text", index=i, topic=t) for i, t in enumerate(topics)]
+    carousel = Carousel(carousel_id=f"catalog{uid[:6]}", module_name="Catalog Mod", slides=slides)
+    out = Path(tmp_path) / "renders" / carousel.carousel_id
+    out.mkdir(parents=True, exist_ok=True)
+    for i in range(slide_count):
+        (out / f"slide_{i + 1:02d}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    cid = save_carousel(carousel, module_id=module["id"], output_dir=str(out))
+    return user, headers, cid
+
+
 def test_microtopic_back_fields_optional():
     t = MicroTopic(header="Front", body="Front body")
     assert t.back_header is None
@@ -90,3 +120,69 @@ def test_deck_file_cabinet_flow(tmp_path, make_user):
     assert rc.json()["count"] == 1
     rc2 = client.get("/api/v1/cabinet?tray=review", headers=headers)
     assert rc2.json()["count"] == 1
+
+
+def test_report_card_stores_report(make_user):
+    from app.db.database import _connect
+
+    user, headers = make_user()
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/report",
+        json={"card_id": "123:0", "user_id": user["id"], "reason": "Wrong formula"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["reported"] is True
+    assert data["card_id"] == "123:0"
+    assert data["user_id"] == user["id"]
+    assert data["reason"] == "Wrong formula"
+    assert data["created_at"]
+
+    conn = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT card_id, user_id, reason FROM card_reports WHERE id=%s",
+            (data["id"],),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    assert dict(row) == {"card_id": "123:0", "user_id": user["id"], "reason": "Wrong formula"}
+
+
+def test_report_card_requires_auth():
+    client = TestClient(app)
+    r = client.post("/api/v1/report", json={"card_id": "123:0", "reason": "Wrong"})
+    assert r.status_code == 401
+
+
+def test_file_rejects_catalog(tmp_path, make_user):
+    _user, headers, cid = _make_carousel(tmp_path, make_user)
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "catalog"},
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_existing_catalog_rows_read_as_review(tmp_path, make_user):
+    from app.db.database import upsert_card_state
+
+    user, headers, cid = _make_carousel(tmp_path, make_user)
+    upsert_card_state(user["id"], cid, 0, "catalog")
+    client = TestClient(app)
+
+    deck = client.get(f"/api/v1/deck?shelf={cid}", headers=headers).json()
+    assert len(deck["cards"]) == 1
+    assert deck["cards"][0]["status"] == "review"
+
+    cabinet = client.get("/api/v1/cabinet?tray=review", headers=headers).json()
+    assert cabinet["count"] == 1
+    assert cabinet["cards"][0]["status"] == "review"
+
+    assert client.get("/api/v1/cabinet?tray=catalog", headers=headers).status_code == 400

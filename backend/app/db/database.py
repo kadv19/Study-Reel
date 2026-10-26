@@ -37,14 +37,18 @@ CREATE TABLE IF NOT EXISTS carousels (
     created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS pipeline_state (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    state TEXT NOT NULL DEFAULT 'IDLE',
+CREATE TABLE IF NOT EXISTS jobs (
+    id BIGSERIAL PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
     stage TEXT,
+    state TEXT NOT NULL DEFAULT 'QUEUED',
     progress REAL NOT NULL DEFAULT 0.0,
     message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_jobs_owner ON jobs(owner_user_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
 
 CREATE TABLE IF NOT EXISTS user_card_states (
     id SERIAL PRIMARY KEY,
@@ -90,6 +94,16 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+
+CREATE TABLE IF NOT EXISTS card_reports (
+    id BIGSERIAL PRIMARY KEY,
+    card_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_card_reports_user ON card_reports(user_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_card_reports_card ON card_reports(card_id, id DESC);
 """
 
 
@@ -173,11 +187,6 @@ def init_db(db_path: str | Path | None = None) -> None:
         )
         _exec(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
         _exec(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
-        _exec(
-            conn,
-            "INSERT INTO pipeline_state (id, state, updated_at) VALUES (1, 'IDLE', %s) ON CONFLICT (id) DO NOTHING",
-            (_now(),),
-        )
         colleges = [
             ("NIE", "NIE"),
         ]
@@ -351,32 +360,29 @@ def get_carousel_owner(carousel_id: int, db_path: str | Path | None = None) -> s
     return row["owner_user_id"] if row else None
 
 
-def get_pipeline_state(db_path: str | Path | None = None) -> dict:
-    conn = _connect(db_path)
-    try:
-        cur = _exec(conn, "SELECT * FROM pipeline_state WHERE id = 1")
-        row = cur.fetchone()
-    finally:
-        conn.close()
-    return dict(row) if row else {}
-
-
-def set_pipeline_state(
-    state: str, stage: str | None, progress: float, message: str = "",
+def create_job(
+    owner_user_id: str,
+    stage: str | None,
+    state: str = "QUEUED",
+    progress: float = 0.0,
+    message: str = "",
     db_path: str | Path | None = None,
-) -> None:
+) -> dict:
+    now = _now()
     conn = _connect(db_path)
     try:
-        _exec(
+        cur = _exec(
             conn,
             """
-            UPDATE pipeline_state
-            SET state = %s, stage = %s, progress = %s, message = %s, updated_at = %s
-            WHERE id = 1
+            INSERT INTO jobs (owner_user_id, stage, state, progress, message, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
             """,
-            (state, stage, progress, message, _now()),
+            (owner_user_id, stage, state, progress, message, now, now),
         )
+        row = cur.fetchone()
         conn.commit()
+        return dict(row) if row else {}
     except Exception:
         conn.rollback()
         raise
@@ -384,7 +390,125 @@ def set_pipeline_state(
         conn.close()
 
 
+def update_job(
+    job_id: int,
+    state: str,
+    stage: str | None,
+    progress: float,
+    message: str = "",
+    db_path: str | Path | None = None,
+) -> dict | None:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE jobs
+            SET state = %s, stage = %s, progress = %s, message = %s, updated_at = %s
+            WHERE id = %s
+            RETURNING *
+            """,
+            (state, stage, progress, message, _now(), job_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_latest_job(
+    owner_user_id: str, db_path: str | Path | None = None
+) -> dict | None:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            "SELECT * FROM jobs WHERE owner_user_id=%s ORDER BY id DESC LIMIT 1",
+            (owner_user_id,),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def get_job_for_user(
+    job_id: int, owner_user_id: str, db_path: str | Path | None = None
+) -> dict | None:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            "SELECT * FROM jobs WHERE id=%s AND owner_user_id=%s",
+            (job_id, owner_user_id),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def count_active_jobs(
+    owner_user_id: str, db_path: str | Path | None = None
+) -> int:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            "SELECT COUNT(*) AS count FROM jobs WHERE owner_user_id=%s AND state IN ('QUEUED','PROCESSING')",
+            (owner_user_id,),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return int(row["count"]) if row else 0
+
+
+def count_syllabi_since(
+    owner_user_id: str, since: datetime, db_path: str | Path | None = None
+) -> int:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            SELECT COUNT(*) AS count
+            FROM syllabi
+            WHERE owner_user_id=%s AND created_at::timestamptz >= %s
+            """,
+            (owner_user_id, since),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return int(row["count"]) if row else 0
+
+
+def get_job_queue_position(
+    job_id: int, db_path: str | Path | None = None
+) -> int:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            "SELECT COUNT(*) AS position FROM jobs WHERE state='QUEUED' AND id <= %s",
+            (job_id,),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return int(row["position"]) if row else 0
+
+
 # ---- Card Catalog helpers (PDF §3) ----------------------------------------
+
+
+def _normalize_card_status(status: str) -> str:
+    return "review" if status == "catalog" else status
 
 
 def upsert_card_state(
@@ -415,18 +539,52 @@ def upsert_card_state(
     return dict(row) if row else {}
 
 
-def list_card_states(user_id: str, status: str | None = None, db_path: str | Path | None = None) -> list[dict]:
+def create_card_report(
+    card_id: str, user_id: str, reason: str, db_path: str | Path | None = None,
+) -> dict:
+    now = _now()
     conn = _connect(db_path)
     try:
-        if status:
-            cur = _exec(conn, "SELECT * FROM user_card_states WHERE user_id=%s AND status=%s ORDER BY filed_at DESC", (user_id, status))
+        cur = _exec(
+            conn,
+            """
+            INSERT INTO card_reports (card_id, user_id, reason, created_at)
+            VALUES (%s, %s, %s, %s)
+            RETURNING *
+            """,
+            (card_id, user_id, reason, now),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else {}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def list_card_states(user_id: str, status: str | None = None, db_path: str | Path | None = None) -> list[dict]:
+    requested = "review" if status == "catalog" else status
+    conn = _connect(db_path)
+    try:
+        if requested == "review":
+            cur = _exec(conn, "SELECT * FROM user_card_states WHERE user_id=%s AND status IN ('review','catalog') ORDER BY filed_at DESC", (user_id,))
+            rows = cur.fetchall()
+        elif requested:
+            cur = _exec(conn, "SELECT * FROM user_card_states WHERE user_id=%s AND status=%s ORDER BY filed_at DESC", (user_id, requested))
             rows = cur.fetchall()
         else:
             cur = _exec(conn, "SELECT * FROM user_card_states WHERE user_id=%s ORDER BY filed_at DESC", (user_id,))
             rows = cur.fetchall()
     finally:
         conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["status"] = _normalize_card_status(item["status"])
+        result.append(item)
+    return result
 
 
 def _clean_book_label(file_name: str) -> str:
@@ -477,7 +635,7 @@ def get_shelf_summary(user_id: str, db_path: str | Path | None = None) -> list[d
         states = cur.fetchall()
     finally:
         conn.close()
-    status_map = {r["card_key"]: r["status"] for r in states}
+    status_map = {r["card_key"]: _normalize_card_status(r["status"]) for r in states}
     shelves = []
     for row in carousels:
         try:
@@ -579,7 +737,7 @@ def get_library_summary(user_id: str, db_path: str | Path | None = None) -> list
             by_book[sh["syllabus_id"]].append(sh)
         cur = _exec(conn, "SELECT card_key, status FROM user_card_states WHERE user_id=%s", (user_id,))
         states = cur.fetchall()
-        status_map = {r["card_key"]: r["status"] for r in states}
+        status_map = {r["card_key"]: _normalize_card_status(r["status"]) for r in states}
         # need also modules for shelf counts when no shelves yet (should not happen if fallback exists, but keep)
         mods_by_syl = defaultdict(list)
         if not shelves:
