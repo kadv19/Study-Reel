@@ -343,6 +343,37 @@ class ResendRequest(BaseModel):
         return v
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
+        return v
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., max_length=120)
+    code: str = Field(..., min_length=1, max_length=12)
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
+        return v
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, v: str) -> str:
+        return v.strip()
+
+
 class LoginRequest(BaseModel):
     email: str = Field(..., max_length=120)
     password: str = Field(..., min_length=1)

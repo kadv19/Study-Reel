@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS users (
     verify_expires TIMESTAMPTZ,
     verify_attempts INTEGER DEFAULT 0,
     verify_sent_at TIMESTAMPTZ,
+    reset_code_hash TEXT,
+    reset_expires TIMESTAMPTZ,
+    reset_attempts INTEGER DEFAULT 0,
+    reset_sent_at TIMESTAMPTZ,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(email)
@@ -149,6 +153,10 @@ def init_db(db_path: str | Path | None = None) -> None:
             ("verify_expires", "TIMESTAMPTZ"),
             ("verify_attempts", "INTEGER DEFAULT 0"),
             ("verify_sent_at", "TIMESTAMPTZ"),
+            ("reset_code_hash", "TEXT"),
+            ("reset_expires", "TIMESTAMPTZ"),
+            ("reset_attempts", "INTEGER DEFAULT 0"),
+            ("reset_sent_at", "TIMESTAMPTZ"),
         ]
         for column, definition in verification_columns:
             _exec(
@@ -1003,6 +1011,114 @@ def increment_user_verification_attempts(
         row = cur.fetchone()
         conn.commit()
         return int(row["verify_attempts"]) if row else 0
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def set_user_reset_code(
+    email: str,
+    code_hash: str,
+    expires_at: datetime,
+    sent_at: datetime | None = None,
+    db_path: str | Path | None = None,
+) -> dict | None:
+    now = _now()
+    sent_at = sent_at or datetime.now(timezone.utc)
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE users
+            SET reset_code_hash=%s,
+                reset_expires=%s,
+                reset_attempts=0,
+                reset_sent_at=%s,
+                updated_at=%s
+            WHERE lower(email)=lower(%s)
+            RETURNING *
+            """,
+            (code_hash, expires_at, sent_at, now, email.strip().lower()),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def increment_user_reset_attempts(
+    user_id: str, db_path: str | Path | None = None
+) -> int:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE users
+            SET reset_attempts = COALESCE(reset_attempts, 0) + 1,
+                updated_at=%s
+            WHERE id=%s
+            RETURNING reset_attempts
+            """,
+            (_now(), user_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return int(row["reset_attempts"]) if row else 0
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def reset_user_password(
+    user_id: str, password_hash: str, db_path: str | Path | None = None
+) -> dict | None:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE users
+            SET password_hash=%s,
+                email_verified=TRUE,
+                verify_code_hash=NULL,
+                verify_expires=NULL,
+                verify_attempts=0,
+                verify_sent_at=NULL,
+                reset_code_hash=NULL,
+                reset_expires=NULL,
+                reset_attempts=0,
+                reset_sent_at=NULL,
+                updated_at=%s
+            WHERE id=%s
+            RETURNING *
+            """,
+            (password_hash, _now(), user_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def delete_user_sessions(user_id: str, db_path: str | Path | None = None) -> None:
+    conn = _connect(db_path)
+    try:
+        _exec(conn, "DELETE FROM sessions WHERE user_id=%s", (user_id,))
+        conn.commit()
     except Exception:
         conn.rollback()
         raise

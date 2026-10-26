@@ -16,21 +16,27 @@ from app.auth import current_user
 from app.db.database import (
     create_session,
     create_user_with_password,
+    delete_user_sessions,
     get_user_by_email,
     get_user_by_id,
+    increment_user_reset_attempts,
     increment_user_verification_attempts,
     list_colleges,
     mark_user_email_verified,
     migrate_anon_cards,
+    reset_user_password,
+    set_user_reset_code,
     set_user_verification_code,
     upsert_user,
 )
-from app.emailer import send_verification_email
+from app.emailer import send_password_reset_email, send_verification_email
 from app.schemas import (
     COLLEGE_LABELS,
     AuthResponse,
+    ForgotPasswordRequest,
     LoginRequest,
     ResendRequest,
+    ResetPasswordRequest,
     SignupRequest,
     UserCreate,
     UserOut,
@@ -42,6 +48,9 @@ router = APIRouter(prefix="/api/v1", tags=["users"])
 VERIFY_CODE_TTL = timedelta(minutes=10)
 VERIFY_MAX_ATTEMPTS = 5
 VERIFY_RESEND_SECONDS = 60
+RESET_CODE_TTL = timedelta(minutes=10)
+RESET_MAX_ATTEMPTS = 5
+RESET_RESEND_SECONDS = 60
 NIE_DOMAIN = "nie.ac.in"
 NIE_ONLY_DETAIL = "Only NIE student emails (@nie.ac.in) are allowed."
 
@@ -108,6 +117,19 @@ async def _issue_verification_code(email: str) -> str:
         sent_at=now,
     )
     await send_verification_email(email, code)
+    return code
+
+
+async def _issue_reset_code(email: str) -> str:
+    code = _generate_code()
+    now = _utcnow()
+    set_user_reset_code(
+        email,
+        _hash_code(code),
+        now + RESET_CODE_TTL,
+        sent_at=now,
+    )
+    await send_password_reset_email(email, code)
     return code
 
 
@@ -220,6 +242,72 @@ async def resend_verification(payload: ResendRequest) -> dict:
         "message": "Verification code sent",
         "retry_after": VERIFY_RESEND_SECONDS,
     }
+
+
+@router.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest) -> dict:
+    email = payload.email.strip().lower()
+    if not _is_allowed_email(email):
+        raise HTTPException(status_code=400, detail=NIE_ONLY_DETAIL)
+
+    generic = {
+        "ok": True,
+        "message": "If that email is registered, a reset code is on its way.",
+        "retry_after": RESET_RESEND_SECONDS,
+    }
+    user = get_user_by_email(email)
+    if not user:
+        return generic
+
+    sent_at = user.get("reset_sent_at")
+    if sent_at is not None:
+        elapsed = (_utcnow() - _as_utc(sent_at)).total_seconds()
+        if elapsed < RESET_RESEND_SECONDS:
+            retry_after = max(1, int(RESET_RESEND_SECONDS - elapsed) + 1)
+            return {**generic, "retry_after": retry_after}
+
+    await _issue_reset_code(user["email"])
+    return generic
+
+
+@router.post("/auth/reset-password")
+def reset_password(payload: ResetPasswordRequest) -> dict:
+    user = get_user_by_email(payload.email)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+    if not _is_allowed_email(user["email"]):
+        raise HTTPException(status_code=400, detail=NIE_ONLY_DETAIL)
+
+    code_hash = user.get("reset_code_hash")
+    if not code_hash:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+
+    attempts = int(user.get("reset_attempts") or 0)
+    if attempts >= RESET_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect attempts. Request a new reset code.",
+        )
+
+    expires = user.get("reset_expires")
+    if expires is not None and _as_utc(expires) < _utcnow():
+        raise HTTPException(
+            status_code=400,
+            detail="Reset code expired. Request a new one.",
+        )
+
+    if not hmac.compare_digest(_hash_code(payload.code), code_hash):
+        attempts = increment_user_reset_attempts(user["id"])
+        if attempts >= RESET_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect attempts. Request a new reset code.",
+            )
+        raise HTTPException(status_code=400, detail="Invalid reset code")
+
+    reset_user_password(user["id"], _hash_password(payload.password))
+    delete_user_sessions(user["id"])
+    return {"ok": True, "message": "Password updated"}
 
 
 @router.post("/auth/logout")
