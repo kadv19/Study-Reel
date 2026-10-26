@@ -50,6 +50,7 @@ app = FastAPI(title="StudyReel Backend", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://study-reel-instaclone.onrender.com",
         "https://studyreel-instaclone.onrender.com",
         "http://localhost:8100",
         "http://127.0.0.1:8100",
