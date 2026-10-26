@@ -9,6 +9,13 @@ venv/
 .env
 *.key
 
+# Node / Android dependencies and build output
+node_modules/
+android/**/build/
+android/**/release/
+android/.gradle/
+android/local.properties
+
 # Output artifacts
 output/
 renders/
@@ -36,6 +43,9 @@ instaclone/data/
 !docs/figures/*.png
 !docs/figures/**/*.png
 !instaclone/static/icon-*.png
+
+# Android launcher/splash assets — keep despite *.png
+!android/app/src/main/res/**/*.png
 
 # Test temp / report (never commit)
 .pytest_temp/
