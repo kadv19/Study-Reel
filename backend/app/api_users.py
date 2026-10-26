@@ -1,9 +1,15 @@
-"""Real authentication — bcrypt + opaque session tokens (NIE/VVCE/SJCE)."""
+"""Real authentication — bcrypt, opaque session tokens, NIE email verification."""
 
 from __future__ import annotations
 
-import bcrypt
+import hashlib
+import hmac
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import NoReturn
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import current_user
@@ -12,13 +18,32 @@ from app.db.database import (
     create_user_with_password,
     get_user_by_email,
     get_user_by_id,
+    increment_user_verification_attempts,
     list_colleges,
+    mark_user_email_verified,
     migrate_anon_cards,
+    set_user_verification_code,
     upsert_user,
 )
-from app.schemas import COLLEGE_LABELS, AuthResponse, LoginRequest, SignupRequest, UserCreate, UserOut
+from app.emailer import send_verification_email
+from app.schemas import (
+    COLLEGE_LABELS,
+    AuthResponse,
+    LoginRequest,
+    ResendRequest,
+    SignupRequest,
+    UserCreate,
+    UserOut,
+    VerifyRequest,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
+
+VERIFY_CODE_TTL = timedelta(minutes=10)
+VERIFY_MAX_ATTEMPTS = 5
+VERIFY_RESEND_SECONDS = 60
+NIE_DOMAIN = "nie.ac.in"
+NIE_ONLY_DETAIL = "Only NIE student emails (@nie.ac.in) are allowed."
 
 
 def _hash_password(password: str) -> str:
@@ -34,16 +59,80 @@ def _verify_password(password: str, hash_str: str) -> bool:
         return False
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _allowed_domains() -> set[str]:
+    raw = os.getenv("ALLOWED_EMAIL_DOMAINS", NIE_DOMAIN)
+    return {
+        domain.strip().lower().lstrip("@")
+        for domain in raw.split(",")
+        if domain.strip()
+    }
+
+
+def _email_domain(email: str) -> str:
+    return email.strip().lower().rsplit("@", 1)[-1]
+
+
+def _is_allowed_email(email: str) -> bool:
+    return _email_domain(email) in _allowed_domains()
+
+
+def _college_for_email(email: str) -> str:
+    return "NIE"
+
+
+def _hash_code(code: str) -> str:
+    return hashlib.sha256(code.strip().encode("utf-8")).hexdigest()
+
+
+def _generate_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+async def _issue_verification_code(email: str) -> str:
+    code = _generate_code()
+    now = _utcnow()
+    set_user_verification_code(
+        email,
+        _hash_code(code),
+        now + VERIFY_CODE_TTL,
+        sent_at=now,
+    )
+    await send_verification_email(email, code)
+    return code
+
+
+def _raise_email_unverified() -> NoReturn:
+    raise HTTPException(status_code=403, detail="EMAIL_UNVERIFIED")
+
+
 @router.post("/auth/signup", response_model=AuthResponse)
-def signup(payload: SignupRequest) -> AuthResponse:
-    # check existing
-    existing = get_user_by_email(payload.email)
+async def signup(payload: SignupRequest) -> AuthResponse:
+    email = payload.email.strip().lower()
+    if not _is_allowed_email(email):
+        raise HTTPException(status_code=400, detail=NIE_ONLY_DETAIL)
+    existing = get_user_by_email(email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+
     pw_hash = _hash_password(payload.password)
-    row = create_user_with_password(payload.name, payload.email, payload.college, pw_hash)
-    token = create_session(row["id"])
-    return AuthResponse(token=token, user_id=row["id"], user=UserOut(**row))
+    create_user_with_password(
+        payload.name,
+        email,
+        _college_for_email(email),
+        pw_hash,
+    )
+    await _issue_verification_code(email)
+    _raise_email_unverified()
 
 
 @router.post("/auth/login", response_model=AuthResponse)
@@ -57,8 +146,80 @@ def login(payload: LoginRequest) -> AuthResponse:
         raise HTTPException(status_code=401, detail="No password set for this account — please sign up again")
     if not _verify_password(payload.password, stored):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.get("email_verified"):
+        _raise_email_unverified()
     token = create_session(user["id"])
     return AuthResponse(token=token, user_id=user["id"], user=UserOut(**user))
+
+
+@router.post("/auth/verify")
+def verify_email(payload: VerifyRequest) -> dict:
+    user = get_user_by_email(payload.email)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+    if not _is_allowed_email(user["email"]):
+        raise HTTPException(status_code=400, detail=NIE_ONLY_DETAIL)
+    if user.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Email already verified")
+
+    code_hash = user.get("verify_code_hash")
+    if not code_hash:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+
+    attempts = int(user.get("verify_attempts") or 0)
+    if attempts >= VERIFY_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect attempts. Request a new code.",
+        )
+
+    expires = user.get("verify_expires")
+    if expires is not None and _as_utc(expires) < _utcnow():
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code expired. Request a new code.",
+        )
+
+    if not hmac.compare_digest(_hash_code(payload.code), code_hash):
+        attempts = increment_user_verification_attempts(user["id"])
+        if attempts >= VERIFY_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many incorrect attempts. Request a new code.",
+            )
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    mark_user_email_verified(user["id"])
+    return {"ok": True, "email_verified": True}
+
+
+@router.post("/auth/resend")
+async def resend_verification(payload: ResendRequest) -> dict:
+    user = get_user_by_email(payload.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not _is_allowed_email(user["email"]):
+        raise HTTPException(status_code=400, detail=NIE_ONLY_DETAIL)
+    if user.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Email already verified")
+
+    sent_at = user.get("verify_sent_at")
+    if sent_at is not None:
+        elapsed = (_utcnow() - _as_utc(sent_at)).total_seconds()
+        if elapsed < VERIFY_RESEND_SECONDS:
+            retry_after = max(1, int(VERIFY_RESEND_SECONDS - elapsed) + 1)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Please wait {retry_after} seconds before requesting another code.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+    await _issue_verification_code(user["email"])
+    return {
+        "ok": True,
+        "message": "Verification code sent",
+        "retry_after": VERIFY_RESEND_SECONDS,
+    }
 
 
 @router.post("/auth/logout")

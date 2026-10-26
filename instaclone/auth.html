@@ -100,6 +100,34 @@ try{ if(localStorage.getItem('sr_session_token') && localStorage.getItem('sr_use
     z-index:10; perspective:1600px;
   }
   .stage.pulled .cardoverlay{opacity:1; pointer-events:auto; transform:translateY(0) scale(1);}
+  .stage.verify .cardoverlay{opacity:0; pointer-events:none; transform:translateY(20px) scale(.94);}
+
+  .verifyoverlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transform:translateY(40px) scale(.9);
+    transition: transform .55s cubic-bezier(.2,0,0,1), opacity .4s;
+    z-index:12;
+  }
+  .stage.verify .verifyoverlay{opacity:1; pointer-events:auto; transform:translateY(0) scale(1);}
+  .verifycard{
+    position:relative; width:100%; min-height:480px; border-radius:12px; overflow:hidden;
+    background-color:var(--card); color:var(--ink);
+    background-image: repeating-linear-gradient(rgba(0,0,0,.04), rgba(0,0,0,.04) 1px, transparent 1px, transparent 27px);
+    box-shadow: 0 30px 60px rgba(0,0,0,.55);
+    display:flex;
+  }
+  .verifycard .cardmain{padding:28px 26px 20px;}
+  .verifycode{
+    letter-spacing:.32em; font-family:'Fira Code',monospace; font-size:20px !important;
+    text-align:center; border-bottom-style:solid !important;
+  }
+  .stampbtn.ghost{
+    background:transparent; color:var(--ink); border:1.5px solid #d9cba8; box-shadow:none;
+    margin-top:10px;
+  }
+  .stampbtn.ghost:active{transform:translateY(1px); box-shadow:none;}
+  .verifynotice{ font-size:10.5px; color:var(--muted-ink); margin-top:6px; display:none; }
+  .verifynotice.show{ display:block; }
 
   .card3d{position:relative; width:100%; min-height:480px; transform-style:preserve-3d; transition:transform .6s cubic-bezier(.4,.2,.2,1);}
   .card3d.flipped{transform:rotateY(180deg);}
@@ -231,19 +259,18 @@ try{ if(localStorage.getItem('sr_session_token') && localStorage.getItem('sr_use
             <div class="field">
               <label>College</label>
               <div class="stamprow" id="collegeStamps">
-                <div class="stamp" data-college="NIE">NIE</div>
-                <div class="stamp" data-college="VVCE">VVCE</div>
-                <div class="stamp" data-college="SJCE">SJCE</div>
+                <div class="stamp chosen" data-college="NIE">NIE</div>
               </div>
               <div class="field-error" id="collegeError">Please select your college</div>
             </div>
             <div class="field">
               <label>Email</label>
-              <input type="email" id="suEmail" placeholder="you@college.edu">
+              <input type="email" id="suEmail" placeholder="you@nie.ac.in">
             </div>
             <div class="field">
               <label>Password</label>
               <input type="password" id="suPassword" placeholder="min. 6 characters">
+              <div class="field-error" id="suError"></div>
             </div>
 
             <div class="cardfoot">
@@ -274,11 +301,12 @@ try{ if(localStorage.getItem('sr_session_token') && localStorage.getItem('sr_use
 
             <div class="field">
               <label>Email</label>
-              <input type="email" id="liEmail" placeholder="you@college.edu">
+              <input type="email" id="liEmail" placeholder="you@nie.ac.in">
             </div>
             <div class="field">
               <label>Password</label>
               <input type="password" id="liPassword" placeholder="••••••••">
+              <div class="field-error" id="liError"></div>
             </div>
 
             <div class="cardfoot">
@@ -290,6 +318,31 @@ try{ if(localStorage.getItem('sr_session_token') && localStorage.getItem('sr_use
           <div class="inkmark" id="inkBack"><span>WELCOME</span></div>
         </div>
 
+      </div>
+    </div>
+
+    <div class="verifyoverlay" id="verifyView">
+      <div class="verifycard">
+        <div class="cardmain">
+          <div class="kicker">Email Verification</div>
+          <h1 class="entry">Check your inbox</h1>
+          <p class="sub">We sent a 6-digit code to <strong id="verifyEmail"></strong>.</p>
+
+          <div class="field">
+            <label>6-digit code</label>
+            <input type="text" id="verifyCode" class="verifycode" inputmode="numeric"
+                   autocomplete="one-time-code" maxlength="6" placeholder="000000">
+          </div>
+          <div class="field-error" id="verifyError"></div>
+          <div class="verifynotice" id="verifyNotice"></div>
+
+          <div class="cardfoot">
+            <button class="stampbtn" id="verifyBtn">Verify email ▤</button>
+            <button class="stampbtn ghost" id="resendBtn">Resend code</button>
+            <div class="switchline"><a id="verifyBack">Back to login</a></div>
+          </div>
+        </div>
+        <div class="inkmark" id="inkVerify"><span>VERIFIED</span></div>
       </div>
     </div>
   </div>
@@ -382,7 +435,7 @@ if(typeof window.stampIt !== 'function'){
   };
 }
 </script>
-<script src="/static/auth.js?v=3"></script>
+<script src="/static/auth.js?v=4"></script>
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));

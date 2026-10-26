@@ -67,6 +67,11 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL CHECK (email LIKE '%@%.%'),
     college TEXT NOT NULL,
     password_hash TEXT,
+    email_verified BOOLEAN DEFAULT false,
+    verify_code_hash TEXT,
+    verify_expires TIMESTAMPTZ,
+    verify_attempts INTEGER DEFAULT 0,
+    verify_sent_at TIMESTAMPTZ,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(email)
@@ -124,6 +129,19 @@ def init_db(db_path: str | Path | None = None) -> None:
                 _exec(conn, "ALTER TABLE users ADD COLUMN password_hash TEXT")
             except Exception:
                 conn.rollback()
+        verification_columns = [
+            ("email_verified", "BOOLEAN DEFAULT false"),
+            ("verify_code_hash", "TEXT"),
+            ("verify_expires", "TIMESTAMPTZ"),
+            ("verify_attempts", "INTEGER DEFAULT 0"),
+            ("verify_sent_at", "TIMESTAMPTZ"),
+        ]
+        for column, definition in verification_columns:
+            _exec(
+                conn,
+                f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {column} {definition}",
+            )
+        _exec(conn, "UPDATE users SET email_verified = false WHERE email_verified IS NULL")
         # migration: syllabi.owner_user_id
         cur = _exec(conn, "SELECT column_name FROM information_schema.columns WHERE table_name='syllabi' AND column_name='owner_user_id'")
         if not cur.fetchone():
@@ -160,17 +178,14 @@ def init_db(db_path: str | Path | None = None) -> None:
             "INSERT INTO pipeline_state (id, state, updated_at) VALUES (1, 'IDLE', %s) ON CONFLICT (id) DO NOTHING",
             (_now(),),
         )
-        # seed colleges dropdown — new primary colleges (NIE, VVCE, SJCE)
         colleges = [
             ("NIE", "NIE"),
-            ("VVCE", "VVCE"),
-            ("SJCE", "SJCE"),
         ]
         for code, label in colleges:
             _exec(conn, "INSERT INTO colleges (code, label) VALUES (%s, %s) ON CONFLICT DO NOTHING", (code, label))
-        # clean up old seeded colleges not in new allowed list (keep user rows untouched)
+        # clean up old seeded colleges not in the allowed list (keep user rows untouched)
         try:
-            _exec(conn, "DELETE FROM colleges WHERE code NOT IN ('NIE','VVCE','SJCE')")
+            _exec(conn, "DELETE FROM colleges WHERE code NOT IN ('NIE')")
         except Exception:
             conn.rollback()
         conn.commit()
@@ -741,6 +756,95 @@ def create_user_with_password(name: str, email: str, college: str, password_hash
         cur = _exec(conn, "SELECT * FROM users WHERE id=%s", (uid,))
         row = cur.fetchone()
         return dict(row) if row else {}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def set_user_verification_code(
+    email: str,
+    code_hash: str,
+    expires_at: datetime,
+    sent_at: datetime | None = None,
+    db_path: str | Path | None = None,
+) -> dict | None:
+    now = _now()
+    sent_at = sent_at or datetime.now(timezone.utc)
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE users
+            SET verify_code_hash=%s,
+                verify_expires=%s,
+                verify_attempts=0,
+                verify_sent_at=%s,
+                updated_at=%s
+            WHERE lower(email)=lower(%s)
+            RETURNING *
+            """,
+            (code_hash, expires_at, sent_at, now, email.strip().lower()),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def mark_user_email_verified(user_id: str, db_path: str | Path | None = None) -> dict | None:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE users
+            SET email_verified=TRUE,
+                verify_code_hash=NULL,
+                verify_expires=NULL,
+                verify_attempts=0,
+                verify_sent_at=NULL,
+                updated_at=%s
+            WHERE id=%s
+            RETURNING *
+            """,
+            (_now(), user_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return dict(row) if row else None
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def increment_user_verification_attempts(
+    user_id: str, db_path: str | Path | None = None
+) -> int:
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            UPDATE users
+            SET verify_attempts = COALESCE(verify_attempts, 0) + 1,
+                updated_at=%s
+            WHERE id=%s
+            RETURNING verify_attempts
+            """,
+            (_now(), user_id),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return int(row["verify_attempts"]) if row else 0
     except Exception:
         conn.rollback()
         raise

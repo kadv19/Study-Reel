@@ -225,16 +225,14 @@ class FileCardRequest(BaseModel):
     status: Literal["review", "catalog", "mastered"]
 
 
-# ---- Real authentication (NIE / VVCE / SJCE) ------------------------------
+# ---- Real authentication (NIE only) ---------------------------------------
 
 ALLOWED_COLLEGES = {
-    "NIE", "VVCE", "SJCE",
+    "NIE",
 }
 
 COLLEGE_LABELS = {
     "NIE": "NIE",
-    "VVCE": "VVCE",
-    "SJCE": "SJCE",
 }
 
 
@@ -272,7 +270,9 @@ class UserOut(BaseModel):
 class SignupRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
     email: str = Field(..., max_length=120)
-    college: str = Field(..., description="college code, must be one of NIE, VVCE, SJCE")
+    college: Optional[str] = Field(
+        None, description="Ignored; college is derived server-side from the email domain"
+    )
     password: str = Field(..., min_length=6, max_length=128)
 
     @field_validator("email")
@@ -283,20 +283,42 @@ class SignupRequest(BaseModel):
             raise ValueError("Invalid email")
         return v
 
-    @field_validator("college")
-    @classmethod
-    def validate_college(cls, v: str) -> str:
-        v = v.strip().upper()
-        if v not in ALLOWED_COLLEGES:
-            raise ValueError(f"college must be one of {sorted(ALLOWED_COLLEGES)}")
-        return v
-
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
         v = v.strip()
         if not v:
             raise ValueError("Name required")
+        return v
+
+
+class VerifyRequest(BaseModel):
+    email: str = Field(..., max_length=120)
+    code: str = Field(..., min_length=1, max_length=12)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
+        return v
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, v: str) -> str:
+        return v.strip()
+
+
+class ResendRequest(BaseModel):
+    email: str = Field(..., max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email")
         return v
 
 
