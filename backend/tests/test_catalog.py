@@ -18,23 +18,28 @@ def test_microtopic_back_length_validation():
     with pytest.raises(Exception):
         MicroTopic(header="H", body="B", exam_weight="ultra")  # not low/medium/high
 
-def test_shelves_requires_render(tmp_path, monkeypatch):
-    import uuid
-    from app.db.database import init_db
-    # use isolated DB? but we use main DB; just check endpoint returns list
+def test_shelves_requires_render(tmp_path, auth_headers):
     client = TestClient(app)
-    r = client.get("/api/v1/shelves", headers={"X-User-Id": f"test-user-{uuid.uuid4().hex[:4]}"})
+    r = client.get("/api/v1/shelves", headers=auth_headers)
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 
-def test_deck_file_cabinet_flow(tmp_path):
-    import uuid
-    from app.db.database import save_carousel, init_db
-    from app.schemas import Carousel, Slide, MicroTopic
-    from app.renderer.render import render_carousel
+
+def test_deck_file_cabinet_flow(tmp_path, make_user):
+    from app.db.database import get_module, save_carousel, save_syllabus
+    from app.schemas import Carousel, ExtractedModule, Slide, MicroTopic, Syllabus
     from pathlib import Path
     client = TestClient(app)
-    uid = f"test-catalog-{uuid.uuid4().hex[:6]}"
+    user, headers = make_user()
+    uid = user["id"]
+    # create an owned book/module so the carousel is scoped to this user
+    syllabus = Syllabus(
+        file_name="catalog test.pdf",
+        total_pages=1,
+        modules=[ExtractedModule(module_number=1, module_title="Catalog Mod", topic_strings=["Topic A"])],
+    )
+    save_syllabus(syllabus, owner_user_id=uid)
+    module = get_module(1, owner_user_id=uid)
     # create a carousel with 2 slides, back fields included
     topics = [
         MicroTopic(header="Front A", body="Body A", back_header="Back A", back_body="Back body A", exam_weight="medium"),
@@ -43,15 +48,17 @@ def test_deck_file_cabinet_flow(tmp_path):
     slides = [Slide(slide_type="text", index=i, topic=t) for i, t in enumerate(topics)]
     carousel = Carousel(carousel_id="catalogtest"+uid[:3], module_name="Catalog Mod", slides=slides)
     out = Path(tmp_path) / "renders" / carousel.carousel_id
-    render_carousel(carousel, out_dir=out)
-    cid = save_carousel(carousel, module_id=1, output_dir=str(out))
+    out.mkdir(parents=True, exist_ok=True)
+    for i in range(len(slides)):
+        (out / f"slide_{i + 1:02d}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    cid = save_carousel(carousel, module_id=module["id"], output_dir=str(out))
     # shelves should contain this carousel
-    r = client.get("/api/v1/shelves", headers={"X-User-Id": uid})
+    r = client.get("/api/v1/shelves", headers=headers)
     assert r.status_code == 200
     shelves = r.json()
     assert any(s["carousel_id"] == cid for s in shelves)
     # deck should have 2 cards unfiled
-    r2 = client.get(f"/api/v1/deck?shelf={cid}", headers={"X-User-Id": uid})
+    r2 = client.get(f"/api/v1/deck?shelf={cid}", headers=headers)
     assert r2.status_code == 200
     deck = r2.json()
     assert deck["shelf_id"] == str(cid)
@@ -59,27 +66,27 @@ def test_deck_file_cabinet_flow(tmp_path):
     assert deck["cards"][0]["front"]["header"] == "Front A"
     assert deck["cards"][0]["back"]["back_header"] == "Back A"
     # file first card as mastered
-    r3 = client.post("/api/v1/file", json={"post_id": str(cid), "slide_index": 0, "status": "mastered"}, headers={"X-User-Id": uid})
+    r3 = client.post("/api/v1/file", json={"post_id": str(cid), "slide_index": 0, "status": "mastered"}, headers=headers)
     assert r3.status_code == 200
     assert r3.json()["status"] == "mastered"
     assert r3.json()["shelf_fill"] == 0.5
     # shelf fill should be 0.5 now
-    r4 = client.get("/api/v1/shelves", headers={"X-User-Id": uid})
+    r4 = client.get("/api/v1/shelves", headers=headers)
     shelf = next(s for s in r4.json() if s["carousel_id"] == cid)
     assert shelf["fill_pct"] == 0.5
     assert shelf["mastered_count"] == 1
     # deck should now have 1 card (the other unfiled) — mastered not resurfaced
-    r5 = client.get(f"/api/v1/deck?shelf={cid}", headers={"X-User-Id": uid})
+    r5 = client.get(f"/api/v1/deck?shelf={cid}", headers=headers)
     assert len(r5.json()["cards"]) == 1
     assert r5.json()["cards"][0]["slide_index"] == 1
     # file second as review
-    client.post("/api/v1/file", json={"post_id": str(cid), "slide_index": 1, "status": "review"}, headers={"X-User-Id": uid})
+    client.post("/api/v1/file", json={"post_id": str(cid), "slide_index": 1, "status": "review"}, headers=headers)
     # deck should resurface review after unfiled exhausted: we have 0 unfiled, 1 review -> deck should show review card
-    r6 = client.get(f"/api/v1/deck?shelf={cid}", headers={"X-User-Id": uid})
+    r6 = client.get(f"/api/v1/deck?shelf={cid}", headers=headers)
     assert len(r6.json()["cards"]) == 1
     assert r6.json()["cards"][0]["status"] == "review"
     # cabinet should have both
-    rc = client.get("/api/v1/cabinet?tray=mastered", headers={"X-User-Id": uid})
+    rc = client.get("/api/v1/cabinet?tray=mastered", headers=headers)
     assert rc.json()["count"] == 1
-    rc2 = client.get("/api/v1/cabinet?tray=review", headers={"X-User-Id": uid})
+    rc2 = client.get("/api/v1/cabinet?tray=review", headers=headers)
     assert rc2.json()["count"] == 1

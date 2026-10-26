@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import bcrypt
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth import current_user
 from app.db.database import (
     create_session,
     create_user_with_password,
-    get_session,
     get_user_by_email,
     get_user_by_id,
-    get_user_by_token,
     list_colleges,
     migrate_anon_cards,
     upsert_user,
@@ -74,13 +73,7 @@ def logout(payload: dict) -> dict:
 
 
 @router.get("/auth/me", response_model=UserOut)
-def me(token: str | None = None) -> UserOut:
-    # simple token check via query param for debugging
-    if not token:
-        raise HTTPException(status_code=401, detail="token required")
-    user = get_user_by_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid token")
+def me(user: dict = Depends(current_user)) -> UserOut:
     return UserOut(**user)
 
 
@@ -94,7 +87,7 @@ def get_colleges() -> list[dict]:
 
 
 @router.post("/users", response_model=UserOut)
-def create_user(payload: UserCreate) -> UserOut:
+def create_user(payload: UserCreate, user: dict = Depends(current_user)) -> UserOut:
     try:
         row = upsert_user(payload.name, payload.email, payload.college)
         return UserOut(**row)
@@ -103,7 +96,9 @@ def create_user(payload: UserCreate) -> UserOut:
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
-def get_user(user_id: str) -> UserOut:
+def get_user(user_id: str, user: dict = Depends(current_user)) -> UserOut:
+    if user_id != user["id"]:
+        raise HTTPException(403, "You can only read your own profile")
     row = get_user_by_id(user_id)
     if not row:
         raise HTTPException(404, "User not found")
@@ -111,11 +106,13 @@ def get_user(user_id: str) -> UserOut:
 
 
 @router.post("/users/migrate")
-def migrate(payload: dict) -> dict:
+def migrate(payload: dict, user: dict = Depends(current_user)) -> dict:
     old_id = payload.get("from_id") or payload.get("old_id") or payload.get("from")
     new_id = payload.get("to_id") or payload.get("new_id") or payload.get("to")
     if not old_id or not new_id:
         raise HTTPException(400, "from_id and to_id required")
+    if new_id != user["id"]:
+        raise HTTPException(403, "You can only migrate cards into your own account")
     # verify new user exists
     if not get_user_by_id(new_id):
         raise HTTPException(404, "new user not found")

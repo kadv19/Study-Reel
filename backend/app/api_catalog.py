@@ -5,25 +5,29 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.db.database import delete_syllabus, get_carousel, get_library_summary, get_shelf_summary, list_card_states, upsert_card_state
+from app.auth import current_user
+from app.db.database import (
+    delete_syllabus,
+    get_carousel,
+    get_carousel_owner,
+    get_library_summary,
+    get_shelf_summary,
+    list_card_states,
+    upsert_card_state,
+)
 from app.schemas import FileCardRequest
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
 
 
-def _uid(x_user_id: Optional[str] = Query(None), x_user_id_h: Optional[str] = Header(None, alias="X-User-Id")) -> str:
-    return (x_user_id_h or x_user_id or "anon").strip() or "anon"
-
-
 @router.get("/shelves")
 def get_shelves(
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
+    user: dict = Depends(current_user),
     syllabus_id: Optional[str] = Query(None, description="filter to one book/syllabus"),
 ) -> list[dict]:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
+    uid = user["id"]
     shelves = get_shelf_summary(uid)
     if syllabus_id is not None:
         try:
@@ -36,30 +40,16 @@ def get_shelves(
 
 
 @router.get("/books")
-def get_books(
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
-) -> list[dict]:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
-    return get_library_summary(uid)
+def get_books(user: dict = Depends(current_user)) -> list[dict]:
+    return get_library_summary(user["id"])
 
 
 @router.get("/library")
-def get_library(
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
-) -> list[dict]:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
-    return get_library_summary(uid)
+def get_library(user: dict = Depends(current_user)) -> list[dict]:
+    return get_library_summary(user["id"])
 
 
-@router.delete("/library/{book_id}")
-def delete_book(
-    book_id: str,
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
-) -> dict:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
+def _delete_book(book_id: str, uid: str) -> dict:
     try:
         sid = int(book_id)
     except:
@@ -75,33 +65,38 @@ def delete_book(
     return {"deleted": sid, "book_id": str(sid)}
 
 
+@router.delete("/library/{book_id}")
+def delete_book(
+    book_id: str,
+    user: dict = Depends(current_user),
+) -> dict:
+    return _delete_book(book_id, user["id"])
+
+
 @router.delete("/books/{book_id}")
 def delete_book_alias(
     book_id: str,
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
+    user: dict = Depends(current_user),
 ) -> dict:
-    return delete_book(book_id, user_id, user_id_q)
+    return _delete_book(book_id, user["id"])
 
 
 @router.delete("/syllabi/{syllabus_id}")
 def delete_syllabus_alias(
     syllabus_id: str,
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
+    user: dict = Depends(current_user),
 ) -> dict:
-    return delete_book(syllabus_id, user_id, user_id_q)
+    return _delete_book(syllabus_id, user["id"])
 
 
 @router.get("/deck")
 def get_deck(
     shelf: str = Query(..., description="shelf_id (carousel id) or label"),
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
+    user: dict = Depends(current_user),
     replay: bool = Query(False, description="if true, return all cards ignoring filed status"),
     all: bool = Query(False, alias="all", description="alias for replay"),
 ) -> dict:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
+    uid = user["id"]
     do_replay = replay or all
     shelves = get_shelf_summary(uid)
     # find shelf by shelf_id or label
@@ -265,11 +260,10 @@ def get_deck(
 @router.post("/file")
 def file_card(
     payload: FileCardRequest,
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
+    user: dict = Depends(current_user),
 ) -> dict:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
-    # validate carousel exists
+    uid = user["id"]
+    # validate carousel exists and belongs to the caller
     try:
         cid = int(payload.post_id)
     except:
@@ -280,6 +274,8 @@ def file_card(
             raise HTTPException(400, "post_id must be carousel id")
     rec = get_carousel(cid)
     if not rec:
+        raise HTTPException(404, f"Carousel {cid} not found")
+    if get_carousel_owner(cid) != uid:
         raise HTTPException(404, f"Carousel {cid} not found")
     total = len(rec["carousel"].get("slides", []))
     if payload.slide_index >= total:
@@ -294,10 +290,9 @@ def file_card(
 @router.get("/cabinet")
 def get_cabinet(
     tray: str = Query(..., description="review|catalog|mastered"),
-    user_id: str = Header(None, alias="X-User-Id"),
-    user_id_q: Optional[str] = Query(None, alias="user_id"),
+    user: dict = Depends(current_user),
 ) -> dict:
-    uid = (user_id or user_id_q or "anon").strip() or "anon"
+    uid = user["id"]
     if tray not in ("review","catalog","mastered"):
         raise HTTPException(400, "tray must be review|catalog|mastered")
     states = list_card_states(uid, status=tray)

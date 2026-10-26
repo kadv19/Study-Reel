@@ -1,9 +1,6 @@
 try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
 const BACKEND = window.STUDYREEL_BACKEND || '';
 const TOKEN = localStorage.getItem('sr_session_token') || '';
-const REAL_ID = localStorage.getItem('sr_user_real_id') || null;
-let USER_ID = REAL_ID || localStorage.getItem('sr_user_id') || 'anon';
-if(REAL_ID) USER_ID = REAL_ID;
 
 const state = {
   level: 1,
@@ -41,9 +38,12 @@ const modalFront = document.getElementById('modalFront');
 const modalBack = document.getElementById('modalBack');
 
 function headers(){
-  const h = { 'X-User-Id': REAL_ID || USER_ID };
-  if(TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-  return h;
+  return TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {};
+}
+
+function handleUnauthorized(){
+  try{ localStorage.clear(); }catch(e){}
+  location.href = '/auth';
 }
 
 function esc(value){
@@ -59,7 +59,7 @@ function clampPct(value){
 async function getJSON(path){
   try{
     const res = await fetch(`${BACKEND}${path}`, { headers: headers() });
-    if(res.status === 401){ location.href = '/auth'; return null; }
+    if(res.status === 401){ handleUnauthorized(); return null; }
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     return text ? JSON.parse(text) : null;
@@ -256,6 +256,25 @@ function slideImageUrl(shelf, card){
   return `${BACKEND}/api/v1/carousels/${encodeURIComponent(cid)}/slides/${Number(card.slide_index) || 0}.png`;
 }
 
+function loadAuthedImage(img){
+  const url = img.dataset.src;
+  if(!url) return;
+  fetch(url, {headers: headers()}).then((res) => {
+    if(res.status === 401){ handleUnauthorized(); return null; }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  }).then((blob) => {
+    if(!blob) return;
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => URL.revokeObjectURL(objectUrl);
+    img.src = objectUrl;
+  }).catch(() => {
+    const media = img.parentElement;
+    if(media) media.classList.remove('has-img');
+    img.remove();
+  });
+}
+
 function renderCardsLoading(shelf){
   cardHead.textContent = 'Cards';
   cardCount.textContent = '—';
@@ -300,7 +319,7 @@ function renderCards(data, shelf){
     btn.setAttribute('aria-label', `Open card ${front.header || slideNumber}`);
     btn.innerHTML = `
       <div class="preview-media${image ? ' has-img' : ''}">
-        ${image ? `<img src="${esc(image)}" alt="" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('has-img');this.remove()">` : ''}
+        ${image ? `<img data-src="${esc(image)}" alt="" loading="lazy" decoding="async">` : ''}
         ${fallback}
         <span class="preview-num">${slideNumber}</span>
         <span class="preview-status ${status}"><span class="dot"></span>${statusLabel}</span>
@@ -309,6 +328,8 @@ function renderCards(data, shelf){
     `;
     btn.addEventListener('click', () => openCardModal(card));
     cardGrid.appendChild(btn);
+    const img = btn.querySelector('img[data-src]');
+    if(img) loadAuthedImage(img);
   });
 }
 

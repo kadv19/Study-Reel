@@ -232,22 +232,40 @@ def save_carousel(
     return cid
 
 
-def get_module(module_number: int, db_path: str | Path | None = None) -> dict | None:
-    """Fetch the module with the given number from the most recent syllabus."""
+def get_module(
+    module_number: int,
+    owner_user_id: str | None = None,
+    db_path: str | Path | None = None,
+) -> dict | None:
+    """Fetch the module with the given number, optionally scoped to its owner."""
     conn = _connect(db_path)
     try:
-        cur = _exec(
-            conn,
-            """
-            SELECT m.id, m.module_number, m.topic_json, s.resource_text, s.id as syllabus_id
-            FROM modules m
-            JOIN syllabi s ON s.id = m.syllabus_id
-            WHERE m.module_number = %s
-            ORDER BY s.id DESC
-            LIMIT 1
-            """,
-            (module_number,),
-        )
+        if owner_user_id is None:
+            cur = _exec(
+                conn,
+                """
+                SELECT m.id, m.module_number, m.topic_json, s.resource_text, s.id as syllabus_id
+                FROM modules m
+                JOIN syllabi s ON s.id = m.syllabus_id
+                WHERE m.module_number = %s
+                ORDER BY s.id DESC, m.id DESC
+                LIMIT 1
+                """,
+                (module_number,),
+            )
+        else:
+            cur = _exec(
+                conn,
+                """
+                SELECT m.id, m.module_number, m.topic_json, s.resource_text, s.id as syllabus_id
+                FROM modules m
+                JOIN syllabi s ON s.id = m.syllabus_id
+                WHERE m.module_number = %s AND s.owner_user_id = %s
+                ORDER BY s.id DESC, m.id DESC
+                LIMIT 1
+                """,
+                (module_number, owner_user_id),
+            )
         row = cur.fetchone()
     finally:
         conn.close()
@@ -295,6 +313,27 @@ def get_carousel(carousel_id: int, db_path: str | Path | None = None) -> dict | 
         "carousel": json.loads(row["carousel_json"]),
         "output_dir": row["output_dir"],
     }
+
+
+def get_carousel_owner(carousel_id: int, db_path: str | Path | None = None) -> str | None:
+    """Return the owner_user_id for a carousel, or None when it does not exist."""
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            """
+            SELECT s.owner_user_id
+            FROM carousels c
+            JOIN modules m ON m.id = c.module_id
+            JOIN syllabi s ON s.id = m.syllabus_id
+            WHERE c.id = %s
+            """,
+            (carousel_id,),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    return row["owner_user_id"] if row else None
 
 
 def get_pipeline_state(db_path: str | Path | None = None) -> dict:

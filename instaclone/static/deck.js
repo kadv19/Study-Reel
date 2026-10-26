@@ -41,10 +41,12 @@ const accountNameEl = document.getElementById('accountName');
 const accountCollegeEl = document.getElementById('accountCollege');
 
 function uidHeaders(){
-  const id = REAL_ID || USER_ID;
-  const h={'X-User-Id': id};
-  if(TOKEN) h['Authorization']='Bearer '+TOKEN;
-  return h;
+  return TOKEN ? {'Authorization':'Bearer '+TOKEN} : {};
+}
+
+function handleUnauthorized(){
+  try{ localStorage.clear(); }catch(e){}
+  location.href='/auth';
 }
 function updateBadge(){
   const rawName = localStorage.getItem('sr_user_name');
@@ -61,7 +63,7 @@ function updateBadge(){
   }
   // If name was fallback (no sr_user_name), try to fetch fresh from backend and retry
   if(!rawName || !rawName.trim()){
-    fetch(`${window.STUDYREEL_BACKEND}/api/v1/auth/me?token=${encodeURIComponent(TOKEN||'')}`, {headers: uidHeaders()}).then(r=>r.ok?r.text().then(t=>JSON.parse(t)):null).then(u=>{
+    fetch(`${window.STUDYREEL_BACKEND}/api/v1/auth/me`, {headers: uidHeaders()}).then(r=>{ if(r.status===401){ handleUnauthorized(); return null; } return r.ok?r.text().then(t=>JSON.parse(t)):null; }).then(u=>{
       if(u && u.name && u.name.trim()){
         localStorage.setItem('sr_user_name', u.name);
         if(u.college) localStorage.setItem('sr_user_college', u.college);
@@ -147,6 +149,7 @@ async function deleteBook(bookId, event){
   if(!confirm(`Delete "${label}"? This will remove all its shelves and cards. This cannot be undone.`)) return;
   try{
     const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/library/${encodeURIComponent(bookId)}`, {method:'DELETE', headers: uidHeaders()});
+    if(res.status===401){ handleUnauthorized(); return; }
     if(!res.ok){
       let msg = await res.text();
       try{ const j=JSON.parse(msg); msg=j.detail||msg; }catch{}
@@ -303,7 +306,7 @@ async function loadLibrary(){
       fetch(`${window.STUDYREEL_BACKEND}/api/v1/library`, {headers: uidHeaders()}),
       fetch(`${window.STUDYREEL_BACKEND}/api/v1/shelves`, {headers: uidHeaders()})
     ]);
-    if(bRes.status===401 || sRes.status===401){ location.href='/auth'; return; }
+    if(bRes.status===401 || sRes.status===401){ handleUnauthorized(); return; }
     const bText = bRes.ok ? await bRes.text() : null;
     books = bRes.ok ? JSON.parse(bText) : [];
     const sText = sRes.ok ? await sRes.text() : null;
@@ -359,7 +362,7 @@ async function loadDeck(shelfId, isReplay){
   try{
     const url = `${window.STUDYREEL_BACKEND}/api/v1/deck?shelf=${encodeURIComponent(shelfId)}` + (isReplay ? '&replay=1' : '');
     const res = await fetch(url, {headers: uidHeaders()});
-    if(res.status===401){ location.href='/auth'; return; }
+    if(res.status===401){ handleUnauthorized(); return; }
     if(!res.ok) throw new Error(await res.text());
     const deckText = await res.text();
     deck = JSON.parse(deckText);
@@ -615,10 +618,12 @@ async function file(kind){
   if(trays[kind]) trays[kind].classList.add(pulse[kind]);
   setTimeout(()=>{ if(trays[kind]) trays[kind].className='tray'; }, 500);
   try{
-    await fetch(`${window.STUDYREEL_BACKEND}/api/v1/file`, {method:'POST', headers:{'Content-Type':'application/json', ...uidHeaders()}, body: JSON.stringify({post_id: card.post_id, slide_index: card.slide_index, status: kind})});
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/file`, {method:'POST', headers:{'Content-Type':'application/json', ...uidHeaders()}, body: JSON.stringify({post_id: card.post_id, slide_index: card.slide_index, status: kind})});
+    if(res.status===401){ handleUnauthorized(); return; }
   }catch(e){ console.error('file', e); }
   try{
     const shelvesRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/shelves`, {headers: uidHeaders()});
+    if(shelvesRes.status===401){ handleUnauthorized(); return; }
     const ssText = await shelvesRes.text();
     const ss = JSON.parse(ssText);
     // update activeShelf fill locally and also update library book progress

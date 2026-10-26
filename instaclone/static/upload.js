@@ -2,13 +2,18 @@
 try{ if(!localStorage.getItem('sr_session_token')) location.href='/auth'; }catch(e){}
 const BACKEND = window.STUDYREEL_BACKEND || '';
 function uidHeaders(){
-  const id = localStorage.getItem('sr_user_real_id') || localStorage.getItem('sr_user_id') || 'anon';
   const tok = localStorage.getItem('sr_session_token') || '';
-  const h={'X-User-Id': id};
-  if(tok) h['Authorization']='Bearer '+tok;
-  return h;
+  return tok ? {'Authorization':'Bearer '+tok} : {};
 }
 function jsonHeaders(){ return {...uidHeaders(), 'Content-Type':'application/json'}; }
+function handleUnauthorized(){
+  try{ localStorage.clear(); }catch(e){}
+  location.href='/auth';
+}
+function checkUnauthorized(res){
+  if(res.status === 401){ handleUnauthorized(); return true; }
+  return false;
+}
 
 let slideCount = 10;
 const syllabusFile = document.getElementById('syllabusFile');
@@ -92,6 +97,7 @@ generateBtn.addEventListener('click', async ()=>{
     if(rFile) form.append('resource_file', rFile);
     log(`Uploading ${sFile.name} ${rFile ? '+ '+rFile.name : ''} as ${depth}/${tone} ×${slideCount}`);
     const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/syllabus/upload`, {method:'POST', body: form, headers: uidHeaders()});
+    if(checkUnauthorized(res)) return;
     if(!res.ok){ const t=await res.text(); throw new Error(t); }
     const upText = await res.text();
     uploaded = JSON.parse(upText);
@@ -130,6 +136,7 @@ generateBtn.addEventListener('click', async ()=>{
         headers: jsonHeaders(),
         body: JSON.stringify({depth_format: depth, tone: tone, slide_count: slideCount})
       });
+      if(checkUnauthorized(tRes)) return;
       if(!tRes.ok){ const t=await tRes.text(); throw new Error(t); }
       const tText = await tRes.text();
       const topics = JSON.parse(tText);
@@ -142,6 +149,7 @@ generateBtn.addEventListener('click', async ()=>{
         headers: jsonHeaders(),
         body: JSON.stringify({module_name: modLabel.slice(0,60), topics: topics})
       });
+      if(checkUnauthorized(rRes)) return;
       if(!rRes.ok){ const t=await rRes.text(); throw new Error(t); }
       const rText = await rRes.text();
       const rendered = JSON.parse(rText);
@@ -156,6 +164,7 @@ generateBtn.addEventListener('click', async ()=>{
           headers: jsonHeaders(),
           body: JSON.stringify({module_name: modLabel, topics: topics})
         });
+        if(checkUnauthorized(mRes)) return;
         if(mRes.ok) { const mText = await mRes.text(); meta = JSON.parse(mText); }
       }catch{}
       if(!meta) meta = {caption: `${modLabel} — key concepts!`, hashtags: ["studyreel","exam","learn"], cover_slide: 0};
@@ -166,6 +175,7 @@ generateBtn.addEventListener('click', async ()=>{
         headers: jsonHeaders(),
         body: JSON.stringify({carousel_id: rendered.id, caption: meta.caption, hashtags: meta.hashtags, cover_slide: Math.min(meta.cover_slide||0, topics.length-1)})
       });
+      if(checkUnauthorized(pRes)) return;
       if(!pRes.ok){ const t=await pRes.text(); throw new Error(t); }
       const pText = await pRes.text();
       const pub = JSON.parse(pText);

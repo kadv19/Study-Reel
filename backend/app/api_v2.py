@@ -10,8 +10,9 @@ import os
 import threading
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth import require_admin_key
 from app.db.database import get_carousel
 from app.publisher import get_publisher
 from app.publisher.store import (
@@ -62,7 +63,7 @@ def metadata_preview(payload: MetadataPreviewRequest) -> dict:
         ).model_dump()
 
 
-@router.post("/publish")
+@router.post("/publish", dependencies=[Depends(require_admin_key)])
 def publish(payload: PublishRequest) -> dict:
     record = get_carousel(payload.carousel_id)
     if record is None:
@@ -104,12 +105,12 @@ def publish(payload: PublishRequest) -> dict:
             "status": result.status, "provider": result.provider}
 
 
-@router.get("/posts")
+@router.get("/posts", dependencies=[Depends(require_admin_key)])
 def posts() -> list[dict]:
     return list_published_posts(db_path=_db_path())
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_admin_key)])
 def status() -> dict:
     return {
         "provider": get_publisher().provider,
@@ -118,12 +119,12 @@ def status() -> dict:
     }
 
 
-@router.post("/oauth/connect")
+@router.post("/oauth/connect", dependencies=[Depends(require_admin_key)])
 def oauth_connect() -> dict:
     return save_oauth_token(db_path=_db_path())
 
 
-@router.post("/oauth/revoke")
+@router.post("/oauth/revoke", dependencies=[Depends(require_admin_key)])
 def oauth_revoke() -> dict:
     clear_oauth_token(db_path=_db_path())
     return {"status": "revoked", "connected": False}

@@ -1,8 +1,32 @@
-"""Shared fixtures for renderer tests (canonical StudyReel schema)."""
+"""Shared fixtures for renderer and API tests."""
+import uuid
+
 import pytest
 from pathlib import Path
 
 from app.schemas import Carousel, MicroTopic, Slide
+
+
+@pytest.fixture
+def make_user():
+    """Create a unique real user + session and return (user row, bearer headers)."""
+
+    def _make() -> tuple[dict, dict]:
+        from app.db.database import create_session, create_user_with_password, init_db
+
+        init_db()
+        email = f"test-{uuid.uuid4().hex}@example.com"
+        user = create_user_with_password("Test User", email, "NIE", "unused-hash")
+        token = create_session(user["id"])
+        return user, {"Authorization": f"Bearer {token}"}
+
+    return _make
+
+
+@pytest.fixture
+def auth_headers(make_user):
+    _user, headers = make_user()
+    return headers
 
 
 @pytest.fixture

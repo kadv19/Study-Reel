@@ -7,13 +7,15 @@ from pathlib import Path
 
 from typing import Literal, Optional
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.auth import current_user
 from app.db.database import (
     get_carousel,
+    get_carousel_owner,
     get_module,
     get_pipeline_state,
     get_resource_text_for_syllabus,
@@ -85,7 +87,7 @@ def health() -> dict:
 
 
 @app.get("/api/v1/status")
-def status() -> dict:
+def status(user: dict = Depends(current_user)) -> dict:
     return get_pipeline_state()
 
 
@@ -93,12 +95,10 @@ def status() -> dict:
 async def upload_syllabus(
     file: UploadFile = File(...),
     resource_file: UploadFile | None = File(default=None),
-    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    user: dict = Depends(current_user),
 ) -> Syllabus:
-    """Upload a syllabus PDF, optionally a resource PDF, run ingestion, persist, return typed modules. Requires X-User-Id."""
-    if not x_user_id or not x_user_id.strip():
-        raise HTTPException(status_code=401, detail="X-User-Id header required")
-    owner = x_user_id.strip()
+    """Upload a syllabus PDF, optionally a resource PDF, run ingestion, persist, return typed modules."""
+    owner = user["id"]
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
@@ -137,13 +137,17 @@ async def upload_syllabus(
 
 
 @app.get("/api/v1/modules/{module_number}/topics", response_model=list[MicroTopic])
-def generate_module_topics(module_number: int) -> list[MicroTopic]:
+def generate_module_topics(
+    module_number: int,
+    user: dict = Depends(current_user),
+) -> list[MicroTopic]:
     """Generate AI micro-topics for a stored module via the Gemini engine.
 
-    Requires a syllabus upload first (the module must exist in SQLite).
+    Requires a syllabus upload first (the module must exist in the database
+    and be owned by the caller).
     Pipeline state is driven through PROCESSING -> DONE / FAILED.
     """
-    record = get_module(module_number)
+    record = get_module(module_number, owner_user_id=user["id"])
     if record is None:
         raise HTTPException(status_code=404, detail=f"Module {module_number} not found — upload a syllabus first")
 
@@ -174,14 +178,14 @@ def generate_module_topics(module_number: int) -> list[MicroTopic]:
 def generate_module_topics_post(
     module_number: int,
     req: TopicsGenerateRequest,
-    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    user: dict = Depends(current_user),
 ) -> list[MicroTopic]:
     """POST variant with tailoring options — dropdown-driven flow.
 
     Takes depth_format, tone, slide_count and optional resource_text linked to the syllabus.
     Keeps GET for backward compatibility.
     """
-    record = get_module(module_number)
+    record = get_module(module_number, owner_user_id=user["id"])
     if record is None:
         raise HTTPException(status_code=404, detail=f"Module {module_number} not found — upload a syllabus first")
 
@@ -219,7 +223,7 @@ def generate_module_topics_post(
 @app.post("/api/v1/carousels/render")
 def render_approved_carousel(
     req: CarouselRenderRequest,
-    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    user: dict = Depends(current_user),
 ) -> dict:
     """Render approved MicroTopics into 1080x1350 PNG slides (Playwright)."""
     slides = []
@@ -240,6 +244,11 @@ def render_approved_carousel(
         slides=slides,
     )
 
+    owner = user["id"]
+    module_id = _latest_module_id(owner_user_id=owner)
+    if module_id is None:
+        raise HTTPException(status_code=400, detail="Upload a syllabus before rendering a carousel")
+
     set_pipeline_state("PROCESSING", "rendering", 0.3, f"Rendering {len(slides)} slides")
 
     out_dir = RENDER_DIR / carousel.carousel_id
@@ -249,8 +258,6 @@ def render_approved_carousel(
         set_pipeline_state("FAILED", "rendering", 0.0, f"Rendering failed: {exc}")
         raise HTTPException(status_code=500, detail=f"Rendering failed: {exc}") from exc
 
-    owner = x_user_id.strip() if x_user_id and x_user_id.strip() else None
-    module_id = _latest_module_id(owner_user_id=owner)
     carousel_db_id = save_carousel(carousel, module_id, output_dir=str(out_dir))
     set_pipeline_state(
         "DONE", "rendering", 1.0,
@@ -267,11 +274,16 @@ def render_approved_carousel(
 
 
 @app.get("/api/v1/carousels/{carousel_id}/export")
-def export_carousel(carousel_id: int) -> StreamingResponse:
+def export_carousel(
+    carousel_id: int,
+    user: dict = Depends(current_user),
+) -> StreamingResponse:
     """Download all rendered PNG slides as a ZIP archive."""
     record = get_carousel(carousel_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Carousel {carousel_id} not found")
+    if get_carousel_owner(carousel_id) != user["id"]:
+        raise HTTPException(status_code=403, detail="Not owner of this carousel")
 
     out_dir = Path(record["output_dir"])
     if not out_dir.is_dir():
@@ -296,11 +308,17 @@ def export_carousel(carousel_id: int) -> StreamingResponse:
 
 
 @app.get("/api/v1/carousels/{carousel_id}/slides/{slide_index}.png")
-def get_carousel_slide_png(carousel_id: int, slide_index: int) -> FileResponse:
+def get_carousel_slide_png(
+    carousel_id: int,
+    slide_index: int,
+    user: dict = Depends(current_user),
+) -> FileResponse:
     """Serve one rendered slide as a PNG so the cabinet can show real previews."""
     record = get_carousel(carousel_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Carousel {carousel_id} not found")
+    if get_carousel_owner(carousel_id) != user["id"]:
+        raise HTTPException(status_code=403, detail="Not owner of this carousel")
     if not record.get("output_dir"):
         raise HTTPException(status_code=404, detail=f"Rendered slides missing for carousel {carousel_id}")
     out_dir = Path(record["output_dir"])
@@ -314,23 +332,18 @@ def get_carousel_slide_png(carousel_id: int, slide_index: int) -> FileResponse:
     )
 
 
-def _latest_module_id(owner_user_id: str | None = None) -> int:
-    """Resolve a module_id for carousel FK (latest syllabus's first module, owner-scoped if given)."""
+def _latest_module_id(owner_user_id: str) -> int | None:
+    """Resolve the latest module_id owned by this user for the carousel FK."""
     from app.db.database import _connect, _exec
 
     conn = _connect()
     try:
-        if owner_user_id:
-            cur = _exec(
-                conn,
-                "SELECT m.id FROM modules m JOIN syllabi s ON s.id=m.syllabus_id WHERE s.owner_user_id=%s ORDER BY m.id DESC LIMIT 1",
-                (owner_user_id,),
-            )
-            row = cur.fetchone()
-            if row:
-                return row["id"]
-        cur = _exec(conn, "SELECT id FROM modules ORDER BY id DESC LIMIT 1")
+        cur = _exec(
+            conn,
+            "SELECT m.id FROM modules m JOIN syllabi s ON s.id=m.syllabus_id WHERE s.owner_user_id=%s ORDER BY m.id DESC LIMIT 1",
+            (owner_user_id,),
+        )
         row = cur.fetchone()
     finally:
         conn.close()
-    return row["id"] if row else 1
+    return row["id"] if row else None
