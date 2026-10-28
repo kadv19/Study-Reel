@@ -547,6 +547,27 @@ def upsert_card_state(
     return dict(row) if row else {}
 
 
+def delete_card_state(
+    user_id: str, carousel_id: int, slide_index: int,
+    db_path: str | Path | None = None,
+) -> bool:
+    """Delete a user's card state. Idempotent; scoped to the given user only."""
+    conn = _connect(db_path)
+    try:
+        cur = _exec(
+            conn,
+            "DELETE FROM user_card_states WHERE user_id=%s AND carousel_id=%s AND slide_index=%s",
+            (user_id, carousel_id, slide_index),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def create_card_report(
     card_id: str, user_id: str, reason: str, db_path: str | Path | None = None,
 ) -> dict:

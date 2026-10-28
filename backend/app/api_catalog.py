@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import current_user
 from app.db.database import (
     create_card_report,
+    delete_card_state,
     delete_syllabus,
     get_carousel,
     get_carousel_owner,
@@ -171,6 +172,7 @@ def get_deck(
             "total_slides": 2,
             "fill_pct": 0,
             "cards": demo_cards,
+            "progress": ["unfiled", "unfiled"],
         }
 
     if not target or target.get("carousel_id") is None:
@@ -183,6 +185,7 @@ def get_deck(
     slides = carousel.get("slides", [])
     states = list_card_states(uid)
     status_map = {r["card_key"]: r["status"] for r in states}
+    progress = [status_map.get(f"{cid}:{idx}", "unfiled") for idx in range(len(slides))]
     if do_replay:
         # Replay: ignore filed status, show all cards in order
         deck_cards = []
@@ -255,6 +258,7 @@ def get_deck(
         "total_slides": target["total_slides"],
         "fill_pct": target["fill_pct"],
         "cards": deck_cards,
+        "progress": progress,
     }
 
 
@@ -281,7 +285,11 @@ def file_card(
     total = len(rec["carousel"].get("slides", []))
     if payload.slide_index >= total:
         raise HTTPException(400, f"slide_index {payload.slide_index} out of range 0..{total-1}")
-    row = upsert_card_state(uid, cid, payload.slide_index, payload.status)
+    if payload.status == "unfiled":
+        delete_card_state(uid, cid, payload.slide_index)
+        row = None
+    else:
+        row = upsert_card_state(uid, cid, payload.slide_index, payload.status)
     # recalc fill
     shelves = get_shelf_summary(uid)
     fill = next((s["fill_pct"] for s in shelves if str(s["carousel_id"]) == str(cid)), 0)

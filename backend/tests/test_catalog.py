@@ -122,6 +122,125 @@ def test_deck_file_cabinet_flow(tmp_path, make_user):
     assert rc2.json()["count"] == 1
 
 
+def test_unfile_mastered_card(tmp_path, make_user):
+    from app.db.database import list_card_states
+
+    user, headers, cid = _make_carousel(tmp_path, make_user, slide_count=2)
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "mastered"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["shelf_fill"] == 0.5
+
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "unfiled"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "unfiled"
+    assert body["row"] is None
+    assert body["shelf_fill"] == 0.0
+
+    states = [s for s in list_card_states(user["id"]) if s["carousel_id"] == cid and s["slide_index"] == 0]
+    assert states == []
+
+    deck = client.get(f"/api/v1/deck?shelf={cid}", headers=headers).json()
+    assert len(deck["cards"]) == 2
+    assert deck["progress"] == ["unfiled", "unfiled"]
+
+
+def test_unfile_review_card(tmp_path, make_user):
+    from app.db.database import list_card_states
+
+    user, headers, cid = _make_carousel(tmp_path, make_user)
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "review"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "unfiled"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "unfiled"
+    assert r.json()["row"] is None
+    assert r.json()["shelf_fill"] == 0.0
+
+    states = [s for s in list_card_states(user["id"]) if s["carousel_id"] == cid and s["slide_index"] == 0]
+    assert states == []
+
+    deck = client.get(f"/api/v1/deck?shelf={cid}", headers=headers).json()
+    assert len(deck["cards"]) == 1
+    assert deck["cards"][0]["slide_index"] == 0
+    assert deck["cards"][0]["status"] == "unfiled"
+
+
+def test_unfile_never_filed_is_noop(tmp_path, make_user):
+    _user, headers, cid = _make_carousel(tmp_path, make_user)
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "unfiled"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "unfiled"
+    assert r.json()["row"] is None
+
+    deck = client.get(f"/api/v1/deck?shelf={cid}", headers=headers).json()
+    assert len(deck["cards"]) == 1
+    assert deck["cards"][0]["status"] == "unfiled"
+    assert deck["progress"] == ["unfiled"]
+
+
+def test_unfile_does_not_touch_other_users_state(tmp_path, make_user):
+    from app.db.database import list_card_states, upsert_card_state
+
+    _user_a, headers_a, cid = _make_carousel(tmp_path, make_user)
+    user_b, _headers_b = make_user()
+    upsert_card_state(user_b["id"], cid, 0, "mastered")
+    client = TestClient(app)
+
+    r = client.post(
+        "/api/v1/file",
+        json={"post_id": str(cid), "slide_index": 0, "status": "unfiled"},
+        headers=headers_a,
+    )
+    assert r.status_code == 200
+
+    b_states = [s for s in list_card_states(user_b["id"]) if s["carousel_id"] == cid and s["slide_index"] == 0]
+    assert len(b_states) == 1
+    assert b_states[0]["status"] == "mastered"
+
+
+def test_deck_progress_length_and_catalog_mapping(tmp_path, make_user):
+    from app.db.database import upsert_card_state
+
+    user, headers, cid = _make_carousel(tmp_path, make_user, slide_count=3)
+    upsert_card_state(user["id"], cid, 0, "mastered")
+    upsert_card_state(user["id"], cid, 1, "catalog")
+    upsert_card_state(user["id"], cid, 2, "review")
+    client = TestClient(app)
+
+    deck = client.get(f"/api/v1/deck?shelf={cid}", headers=headers).json()
+    assert len(deck["progress"]) == deck["total_slides"] == 3
+    assert deck["progress"] == ["mastered", "review", "review"]
+
+    replay = client.get(f"/api/v1/deck?shelf={cid}&replay=true", headers=headers).json()
+    assert len(replay["progress"]) == 3
+    assert replay["progress"] == ["mastered", "review", "review"]
+
+
 def test_report_card_stores_report(make_user):
     from app.db.database import _connect
 

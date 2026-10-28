@@ -221,7 +221,7 @@ class UserCardState(BaseModel):
 class FileCardRequest(BaseModel):
     post_id: str
     slide_index: int = Field(..., ge=0)
-    status: Literal["review", "mastered"]
+    status: Literal["unfiled", "review", "mastered"]
 
 
 class ReportRequest(BaseModel):

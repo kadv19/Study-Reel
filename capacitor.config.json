@@ -3,7 +3,7 @@
   "appName": "StudyReel",
   "webDir": "instaclone",
   "server": {
-    "url": "https://studyreel-instaclone.onrender.com",
+    "url": "https://study-reel-instaclone.onrender.com/",
     "cleartext": false,
     "androidScheme": "https"
   },
