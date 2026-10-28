@@ -172,14 +172,24 @@ def _raise_no_ollama_fallback(last_exc: Exception | None = None) -> None:
     except ImportError:
         raise RuntimeError(f"HTTP 503: {OLLAMA_ABSENT_MESSAGE} (last error: {last_exc})") from last_exc
 
+CARD_CONTENT_RULES = """- body: 90-140 characters, one or two complete sentences, plain language. State the idea AND why/when it matters. No filler, do not repeat the header, never fewer than 70 characters.
+- example: one concrete example or quick self-test, 60-120 characters. Include it on at least 70% of cards that are not code or diagram cards. It must be directly usable by a student, e.g. "If a cell needs 'A, B', it is not in 1NF." Omit it (null) for code and diagram cards.
+- exam traps stay on the back (back_header/back_body); never move them to the front body or example.
+- The body must add information beyond the header; do not restate the header.
+- Diagram-only cards may use the short body "See diagram" and should set example to null.
+- Code cards may use a shorter body (30-140 characters) and should set example to null.
+
+Copy this exact JSON shape for every topic (keys and types must match):
+{"header": "1NF eliminates repeating groups", "body": "A relation is in 1NF when every cell holds one atomic value, so repeating groups must be split into separate rows.", "example": "If a cell needs 'A, B', it is not in 1NF.", "code_block": null, "language_tag": null, "back_header": "Exam trap", "back_body": "Examiners often show a table with multi-valued cells. Name the violated normal form and split the cell.", "exam_weight": "high"}
+"""
+
 SYSTEM_PROMPT = """You are a senior CSE professor creating exam-focused micro-lessons for engineering students.
 
 For the syllabus text provided, produce an array of micro-topics. Each micro-topic must teach one clear, syllabus-supported concept that a student can absorb in 45-60 seconds of scrolling.
 
 Rules:
 - header: short, specific slide title, max 30 characters.
-- body: concise, exam-focused explanation, max 140 characters.
-- code_block: optional; include only when code directly improves understanding of the syllabus concept.
+""" + CARD_CONTENT_RULES + """- code_block: optional; include only when code directly improves understanding of the syllabus concept.
 - code_block: max 22 lines and max 62 characters per line.
 - language_tag: use only one of: python, java, cpp, c, js, sql, kotlin, go, bash, html, css.
 - back_header: optional, short back-side prompt, max 30 chars, e.g. "Why it matters" or "Draw the Gantt chart".
@@ -197,7 +207,7 @@ Rules:
 - No preamble, no explanation, no markdown fence — output ONLY valid JSON.
 """
 
-CACHE_SCHEMA_VERSION = "v5"
+CACHE_SCHEMA_VERSION = "v6"
 
 
 def _hash(text: str) -> str:
@@ -214,7 +224,7 @@ def _build_system_prompt(depth_format: str = "detailed", tone: str = "default", 
     if depth_format == "detailed":
         extras.append("Depth: detailed — full explanations, weave in provided resource notes when present, use complete sentences, keep body up to 140 chars but be thorough.")
     elif depth_format == "short":
-        extras.append("Depth: short & crisp — even more concise than default, bodies ~60-90 chars, no filler, bullet-like but still a sentence.")
+        extras.append("Depth: short & crisp — concise but still substantive, bodies 90-110 chars, no filler, one or two complete sentences.")
     elif depth_format == "diagram":
         extras.append("Format: diagram only — for each topic, instead of a prose body, output a structured `diagram` field: {\"nodes\": [\"...\"], \"edges\": [[\"A\",\"B\"], ...]} with max 6 nodes, describing a simple block diagram for that concept. Keep body very short (e.g. \"See diagram\" ≤ 40 chars) and include diagram. Body still required but minimal. Diagram should be self-contained per slide.")
     elif depth_format == "both":
@@ -237,7 +247,7 @@ def _build_system_prompt(depth_format: str = "detailed", tone: str = "default", 
 
 def _fallback_user_prompt(contents: str, system_prompt: str) -> str:
     """Shared JSON-object instruction for OpenAI-compatible/Ollama fallbacks."""
-    has_diagram = "diagram" in system_prompt.lower()
+    has_diagram = "Format: diagram" in system_prompt or "Format: both" in system_prompt
     diagram_keys = (
         ', diagram (object with nodes:[string] and edges:[[string,string]] or null)'
         if has_diagram else ""
@@ -246,7 +256,8 @@ def _fallback_user_prompt(contents: str, system_prompt: str) -> str:
         f"{contents}\n\n"
         f"Respond with ONLY a JSON object of the form {{\"topics\": [ ... ]}}. "
         f"Each element of the array must have exactly these keys: header "
-        f"(string, max 30 chars), body (string, max 140 chars), code_block "
+        f"(string, max 30 chars), body (string, 90-140 chars, or 30-140 for code cards, or \"See diagram\" for diagram cards), "
+        f"example (string, 60-120 chars, or null for code/diagram cards), code_block "
         f"(string or null), language_tag (string or null), back_header (string or null, max 30), back_body (string or null, max 140), exam_weight (\"low\"|\"medium\"|\"high\" or null){diagram_keys}."
     )
 

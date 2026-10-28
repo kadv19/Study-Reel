@@ -152,6 +152,7 @@ def get_deck(
                 "front": {
                     "header": target["label"],
                     "body": f"Demo card {idx+1} for {target['label']} — upload your own syllabus to create real cards for your subjects.",
+                    "example": "Spot it: name the next stage in this flow, then explain why it matters.",
                     "code": None,
                     "language": "python",
                     "slide_number": idx+1,
@@ -201,6 +202,7 @@ def get_deck(
                 "front": {
                     "header": topic.get("header",""),
                     "body": topic.get("body",""),
+                    "example": topic.get("example"),
                     "code": topic.get("code_block"),
                     "language": topic.get("language_tag") or "python",
                     "slide_number": idx+1,
@@ -231,6 +233,7 @@ def get_deck(
                 "front": {
                     "header": topic.get("header",""),
                     "body": topic.get("body",""),
+                    "example": topic.get("example"),
                     "code": topic.get("code_block"),
                     "language": topic.get("language_tag") or "python",
                     "slide_number": idx+1,

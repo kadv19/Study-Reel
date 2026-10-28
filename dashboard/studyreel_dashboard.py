@@ -175,8 +175,10 @@ with tabs[1]:
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 new_h = st.text_input(f"Slide Title (max 30 chars) {len(t['header'])}/30", value=t["header"], key=f"h_{i}", max_chars=30)
-                new_b = st.text_area(f"Body Text (max 140 chars) {len(t['body'])}/140", value=t["body"], key=f"b_{i}", max_chars=140)
-                st.caption(f"{len(new_h)}/30 · {len(new_b)}/140")
+                new_b = st.text_area(f"Body Text (60-140 chars) {len(t['body'])}/140", value=t["body"], key=f"b_{i}", max_chars=140)
+                ex = t.get("example") or ""
+                new_ex = st.text_area(f"Example (optional, 60-120 chars) {len(ex)}/120", value=ex, key=f"ex_{i}", max_chars=120)
+                st.caption(f"{len(new_h)}/30 · Body {len(new_b)}/140 (target 60-140) · Example {len(new_ex)}/120 (target 60-120)")
                 # Card Catalog backside (PDF §3.1)
                 bh = t.get("back_header") or ""
                 bb = t.get("back_body") or ""
@@ -195,6 +197,7 @@ with tabs[1]:
                 ew_opts = ["low","medium","high"]
                 new_ew = st.selectbox("Exam weight", options=ew_opts, index=ew_opts.index(ew) if ew in ew_opts else 1, key=f"ew_{i}", help="1 low 2 medium 3 high — drives shelf fill & dots")
             topics[i]["header"], topics[i]["body"] = new_h, new_b
+            topics[i]["example"] = new_ex.strip() if new_ex.strip() else None
             topics[i]["code_block"] = new_c.strip() if new_c.strip() else None
             topics[i]["language_tag"] = new_lang if new_lang else None
             topics[i]["back_header"] = new_bh.strip() if new_bh.strip() else None

@@ -3,8 +3,10 @@ import json
 import httpx
 import pytest
 from fastapi import HTTPException
+from pydantic import TypeAdapter
 
 from app.engine import gemini_client as gc
+from app.schemas import MicroTopic
 
 
 def _client_with_failing_gemini(monkeypatch):
@@ -59,6 +61,7 @@ def test_groq_request_payload_and_parse(monkeypatch):
     assert captured["json"]["model"] == "test-model"
     assert captured["json"]["response_format"] == {"type": "json_object"}
     assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert "example" in captured["json"]["messages"][1]["content"]
     assert client.model == "groq:test-model"
 
 
@@ -114,3 +117,58 @@ def test_groq_failure_skips_localhost_ollama(monkeypatch):
         client._generate("syllabus", None, "system")
 
     assert excinfo.value.status_code == 503
+
+VALID_BODY = "A complete explanation that states the main idea and why it matters for exams."
+SHORT_BODY = "Too short."
+
+
+def _groq_response(content: str):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": content}}]}
+
+    return Response()
+
+
+def test_groq_response_missing_example_still_valid(monkeypatch):
+    payload = {"topics": [{"header": "H", "body": VALID_BODY}]}
+
+    monkeypatch.setenv("FALLBACK_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("FALLBACK_API_KEY", "test-key")
+    monkeypatch.setenv("FALLBACK_MODEL", "test-model")
+    monkeypatch.setattr(httpx, "post", lambda url, **kwargs: _groq_response(json.dumps(payload)))
+
+    client = gc.GeminiClient.__new__(gc.GeminiClient)
+    client.model = "gemini-3.6-flash"
+    raw = client._generate_groq("syllabus", "system")
+    topics = TypeAdapter(list[MicroTopic]).validate_python(raw)
+
+    assert topics[0].example is None
+
+
+def test_groq_too_short_body_triggers_repair_round(monkeypatch):
+    requests = []
+    responses = iter([
+        _groq_response(json.dumps({"topics": [{"header": "Short", "body": SHORT_BODY}]})),
+        _groq_response(json.dumps({"topics": [{"header": "Fixed", "body": VALID_BODY, "example": "A quick self-test: apply the rule to one concrete case."}]})),
+    ])
+
+    def fake_post(url, **kwargs):
+        requests.append(kwargs)
+        return next(responses)
+
+    monkeypatch.setenv("FALLBACK_BASE_URL", "https://example.test/v1")
+    monkeypatch.setenv("FALLBACK_API_KEY", "test-key")
+    monkeypatch.setenv("FALLBACK_MODEL", "test-model")
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    client = _client_with_failing_gemini(monkeypatch)
+    topics = client.generate_topics("syllabus", max_retries=1, repair_attempts=1)
+
+    assert len(requests) == 2
+    assert "body too short: write 90-140 characters" in requests[1]["json"]["messages"][1]["content"]
+    assert topics[0].header == "Fixed"
+    assert topics[0].body == VALID_BODY

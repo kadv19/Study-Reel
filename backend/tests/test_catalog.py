@@ -22,7 +22,7 @@ def _make_carousel(tmp_path, make_user, slide_count=1):
     save_syllabus(syllabus, owner_user_id=uid)
     module = get_module(1, owner_user_id=uid)
     topics = [
-        MicroTopic(header=f"Front {i}", body=f"Body {i}", back_header=f"Back {i}", back_body=f"Back body {i}")
+        MicroTopic(header=f"Front {i}", body=f"A complete explanation for card {i} that states the idea and why it matters.", back_header=f"Back {i}", back_body=f"Back body {i}")
         for i in range(slide_count)
     ]
     slides = [Slide(slide_type="text", index=i, topic=t) for i, t in enumerate(topics)]
@@ -36,17 +36,17 @@ def _make_carousel(tmp_path, make_user, slide_count=1):
 
 
 def test_microtopic_back_fields_optional():
-    t = MicroTopic(header="Front", body="Front body")
+    t = MicroTopic(header="Front", body="A complete explanation that states the main idea and why it matters for exams.")
     assert t.back_header is None
-    t2 = MicroTopic(header="H", body="B", back_header="Why", back_body="Because", exam_weight="high")
+    t2 = MicroTopic(header="H", body="Another complete explanation that states the main idea and why it matters for exams.", back_header="Why", back_body="Because", exam_weight="high")
     assert t2.back_header == "Why"
     assert t2.exam_weight == "high"
 
 def test_microtopic_back_length_validation():
     with pytest.raises(Exception):
-        MicroTopic(header="H", body="B", back_header="x"*31)
+        MicroTopic(header="H", body="A complete explanation that states the main idea and why it matters for exams.", back_header="x"*31)
     with pytest.raises(Exception):
-        MicroTopic(header="H", body="B", exam_weight="ultra")  # not low/medium/high
+        MicroTopic(header="H", body="A complete explanation that states the main idea and why it matters for exams.", exam_weight="ultra")  # not low/medium/high
 
 def test_shelves_requires_render(tmp_path, auth_headers):
     client = TestClient(app)
@@ -72,8 +72,8 @@ def test_deck_file_cabinet_flow(tmp_path, make_user):
     module = get_module(1, owner_user_id=uid)
     # create a carousel with 2 slides, back fields included
     topics = [
-        MicroTopic(header="Front A", body="Body A", back_header="Back A", back_body="Back body A", exam_weight="medium"),
-        MicroTopic(header="Front B", body="Body B", back_header="Back B", back_body="Back body B", exam_weight="high"),
+        MicroTopic(header="Front A", body="A complete explanation that states the main idea and why it matters for exams.", back_header="Back A", back_body="Back body A", exam_weight="medium"),
+        MicroTopic(header="Front B", body="Another complete explanation that states the main idea and why it matters for exams.", back_header="Back B", back_body="Back body B", exam_weight="high"),
     ]
     slides = [Slide(slide_type="text", index=i, topic=t) for i, t in enumerate(topics)]
     carousel = Carousel(carousel_id="catalogtest"+uid[:3], module_name="Catalog Mod", slides=slides)

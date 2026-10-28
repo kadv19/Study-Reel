@@ -19,6 +19,13 @@
     <p class="{% if slide.body|length > 110 %}text-base{% else %}text-lg sm:text-xl{% endif %} text-slate-200 font-normal leading-relaxed break-word-safe {% if slide.body|length > 130 %}line-clamp-6{% else %}line-clamp-4{% endif %}">
       {{ slide.body }}
     </p>
+    {% if slide.example and slide.body|length <= 110 %}
+    <div class="mt-3 px-3 py-2 rounded-lg bg-slate-900/70 border border-slate-700/70">
+      <p class="text-sm text-slate-300 font-medium leading-snug break-word-safe line-clamp-2">
+        {{ slide.example }}
+      </p>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Compact IDE / Code Window -->

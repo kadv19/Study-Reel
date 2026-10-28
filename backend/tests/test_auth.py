@@ -31,7 +31,7 @@ def _make_owned_book(owner_id: str, tmp_path) -> tuple[int, int]:
     )
     syllabus_id = save_syllabus(syllabus, owner_user_id=owner_id)
     module = get_module(1, owner_user_id=owner_id)
-    topic = MicroTopic(header="Private", body="Only the owner can see this")
+    topic = MicroTopic(header="Private", body="A complete explanation that states the main idea and why it matters for exams.")
     carousel = Carousel(
         carousel_id=uuid.uuid4().hex[:8],
         module_name="Private Module",

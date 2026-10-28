@@ -15,9 +15,9 @@ SEEDS = [
         "cover_slide": 1,
         "likes": 142, "views": 890,
         "topics": [
-            {"header": "Attention Is All You Need", "body": "Transformers weigh every token against every other to capture long-range dependencies without recurrence.", "code_block": None, "language_tag": None},
-            {"header": "Q K V in Attention", "body": "Query, Key, Value matrices project tokens; dot-product scores softmaxed to weight Values.", "code_block": "scores = Q @ K.T / sqrt(d)\nweights = softmax(scores)", "language_tag": "python"},
-            {"header": "Multi-Head Magic", "body": "Parallel heads learn syntax, semantics, position — then concat and project. More heads, richer view.", "code_block": None, "language_tag": None},
+            {"header": "Attention Is All You Need", "body": "Transformers weigh every token against every other to capture long-range dependencies without recurrence.", "example": "Spot it: if a model compares every token with every other, it uses attention.", "code_block": None, "language_tag": None},
+            {"header": "Q K V in Attention", "body": "Query, Key, Value matrices project tokens; dot-product scores softmaxed to weight Values.", "example": "Self-test: Q asks, K is matched, V is the content returned.", "code_block": "scores = Q @ K.T / sqrt(d)\nweights = softmax(scores)", "language_tag": "python"},
+            {"header": "Multi-Head Magic", "body": "Parallel heads learn syntax, semantics, position — then concat and project. More heads, richer view.", "example": "Example: one head tracks syntax while another tracks position.", "code_block": None, "language_tag": None},
         ]
     },
     {
@@ -27,9 +27,9 @@ SEEDS = [
         "cover_slide": 1,
         "likes": 118, "views": 720,
         "topics": [
-            {"header": "RAG: Grounded LLMs", "body": "Retrieve relevant docs, then generate — reduces hallucination by grounding answers in real data.", "code_block": None, "language_tag": None},
-            {"header": "RAG Pipeline", "body": "Chunk → Embed → Vector DB → Top-K retrieve → Prompt + docs → LLM generates cited answer.", "code_block": "docs = vector_db.search(q_emb, k=5)\nanswer = llm(prompt+docs)", "language_tag": "python"},
-            {"header": "When to Use RAG", "body": "Use when knowledge is private, fast-changing, or must be cited. No retraining needed.", "code_block": None, "language_tag": None},
+            {"header": "RAG: Grounded LLMs", "body": "Retrieve relevant docs, then generate — reduces hallucination by grounding answers in real data.", "example": "Spot it: an answer citing your own document likely came from RAG.", "code_block": None, "language_tag": None},
+            {"header": "RAG Pipeline", "body": "Chunk → Embed → Vector DB → Top-K retrieve → Prompt + docs → LLM generates cited answer.", "example": "Try it: embed a question, retrieve 5 chunks, then prompt the LLM.", "code_block": "docs = vector_db.search(q_emb, k=5)\nanswer = llm(prompt+docs)", "language_tag": "python"},
+            {"header": "When to Use RAG", "body": "Use when knowledge is private, fast-changing, or must be cited. No retraining needed.", "example": "Self-test: private, changing data with citations points to RAG.", "code_block": None, "language_tag": None},
         ]
     },
     {
@@ -39,9 +39,9 @@ SEEDS = [
         "cover_slide": 1,
         "likes": 105, "views": 640,
         "topics": [
-            {"header": "BLDC vs Brushed", "body": "Brushless DC removes mechanical brushes — commutation via electronic inverter, less wear, higher efficiency.", "code_block": None, "language_tag": None},
-            {"header": "3-Phase Inverter", "body": "6-MOSFET bridge drives 3 phases with PWM. Hall sensors give rotor position for timing.", "code_block": "pwm = sin(theta) * Vdc\nmosfet = update(pwm, hall)", "language_tag": "python"},
-            {"header": "Torque Control", "body": "Field-Oriented Control decouples flux and torque — smooth acceleration, regen braking ready.", "code_block": None, "language_tag": None},
+            {"header": "BLDC vs Brushed", "body": "Brushless DC removes mechanical brushes — commutation via electronic inverter, less wear, higher efficiency.", "example": "Spot it: no brushes means an inverter must handle commutation.", "code_block": None, "language_tag": None},
+            {"header": "3-Phase Inverter", "body": "6-MOSFET bridge drives 3 phases with PWM. Hall sensors give rotor position for timing.", "example": "Example: six MOSFETs switch in sequence to drive three phases.", "code_block": "pwm = sin(theta) * Vdc\nmosfet = update(pwm, hall)", "language_tag": "python"},
+            {"header": "Torque Control", "body": "Field-Oriented Control decouples flux and torque — smooth acceleration, regen braking ready.", "example": "Spot it: smooth EV acceleration with separate flux control is FOC.", "code_block": None, "language_tag": None},
         ]
     },
     {
@@ -51,9 +51,9 @@ SEEDS = [
         "cover_slide": 0,
         "likes": 98, "views": 590,
         "topics": [
-            {"header": "Battery Pack 101", "body": "Cells in series raise voltage, parallel raises capacity. 96S = ~400V nominal.", "code_block": None, "language_tag": None},
-            {"header": "SOC Estimation", "body": "Coulomb counting + Kalman filter fuses voltage, current, temp for State-of-Charge.", "code_block": "soc += current * dt / capacity\nsoc = kalman(soc, voltage)", "language_tag": "python"},
-            {"header": "Cell Balancing", "body": "Passive bleeds high cells via resistors; active shuttles charge. Keeps pack healthy.", "code_block": None, "language_tag": None},
+            {"header": "Battery Pack 101", "body": "Cells in series raise voltage, parallel raises capacity. 96S = ~400V nominal.", "example": "Example: 96 cells in series give roughly 400 V nominal.", "code_block": None, "language_tag": None},
+            {"header": "SOC Estimation", "body": "Coulomb counting + Kalman filter fuses voltage, current, temp for State-of-Charge.", "example": "Spot it: current integrated over time is coulomb counting.", "code_block": "soc += current * dt / capacity\nsoc = kalman(soc, voltage)", "language_tag": "python"},
+            {"header": "Cell Balancing", "body": "Passive bleeds high cells via resistors; active shuttles charge. Keeps pack healthy.", "example": "Example: a resistor bleeds charge from the highest cell.", "code_block": None, "language_tag": None},
         ]
     },
     {
@@ -63,9 +63,9 @@ SEEDS = [
         "cover_slide": 0,
         "likes": 87, "views": 520,
         "topics": [
-            {"header": "Lift Explained", "body": "Faster flow over curved top lowers pressure — pressure diff pushes wing up. Angle of attack adds Newton lift.", "code_block": None, "language_tag": None},
-            {"header": "Drag Types", "body": "Parasite drag from shape + skin friction; induced drag from lift — trade-off at high AoA.", "code_block": None, "language_tag": None},
-            {"header": "Polar Curve", "body": "Plot Cl vs Cd — best L/D at one AoA. Gliders chase it, fighters exceed it.", "code_block": "Cl = 2*pi*alpha\nCd = Cd0 + Cl**2/(pi*AR)", "language_tag": "python"},
+            {"header": "Lift Explained", "body": "Faster flow over curved top lowers pressure — pressure diff pushes wing up. Angle of attack adds Newton lift.", "example": "Spot it: faster air over the curved top means lower pressure.", "code_block": None, "language_tag": None},
+            {"header": "Drag Types", "body": "Parasite drag from shape + skin friction; induced drag from lift — trade-off at high AoA.", "example": "Example: skin friction on a wing is parasite drag.", "code_block": None, "language_tag": None},
+            {"header": "Polar Curve", "body": "Plot Cl vs Cd — best L/D at one AoA. Gliders chase it, fighters exceed it.", "example": "Spot it: the best L/D point is where the polar touches its tangent.", "code_block": "Cl = 2*pi*alpha\nCd = Cd0 + Cl**2/(pi*AR)", "language_tag": "python"},
         ]
     },
     {
@@ -75,9 +75,9 @@ SEEDS = [
         "cover_slide": 2,
         "likes": 76, "views": 460,
         "topics": [
-            {"header": "V-Speeds", "body": "V1 decide, VR rotate nose up, V2 safety climb. All weight, wind, runway dependent.", "code_block": None, "language_tag": None},
-            {"header": "Ground Roll", "body": "Thrust > drag + rolling resistance. Flaps increase Cl at low speed, shorten run.", "code_block": None, "language_tag": None},
-            {"header": "Rotation Physics", "body": "Elevator pitches up, increases AoA, lift exceeds weight — liftoff. Gear retract reduces drag.", "code_block": "L = 0.5*rho*V**2*S*Cl\nif L > W: liftoff", "language_tag": "python"},
+            {"header": "V-Speeds", "body": "V1 decide, VR rotate nose up, V2 safety climb. All weight, wind, runway dependent.", "example": "Example: V1 is the speed where a rejected takeoff is still safe.", "code_block": None, "language_tag": None},
+            {"header": "Ground Roll", "body": "Thrust > drag + rolling resistance. Flaps increase Cl at low speed, shorten run.", "example": "Spot it: flaps let the wing make lift at a lower ground speed.", "code_block": None, "language_tag": None},
+            {"header": "Rotation Physics", "body": "Elevator pitches up, increases AoA, lift exceeds weight — liftoff. Gear retract reduces drag.", "example": "Example: pitching the nose up raises AoA until lift exceeds weight.", "code_block": "L = 0.5*rho*V**2*S*Cl\nif L > W: liftoff", "language_tag": "python"},
         ]
     },
     {
@@ -87,9 +87,9 @@ SEEDS = [
         "cover_slide": 1,
         "likes": 68, "views": 410,
         "topics": [
-            {"header": "FCFS & SJF", "body": "FCFS simple but convoy effect. SJF optimal avg wait but needs burst prediction.", "code_block": None, "language_tag": None},
-            {"header": "Round Robin", "body": "Time slice Q gives fairness. Small Q = responsive but overhead; large Q = FCFS.", "code_block": "while ready:\n  run(p, Q)\n  queue.append(p)", "language_tag": "python"},
-            {"header": "Priority & Starvation", "body": "Priority ages waiting jobs to avoid starvation. MLFQ learns burst adaptively.", "code_block": None, "language_tag": None},
+            {"header": "FCFS & SJF", "body": "FCFS simple but convoy effect. SJF optimal avg wait but needs burst prediction.", "example": "Spot it: a long first job delaying everyone else is the convoy effect.", "code_block": None, "language_tag": None},
+            {"header": "Round Robin", "body": "Time slice Q gives fairness. Small Q = responsive but overhead; large Q = FCFS.", "example": "Example: a 4 ms quantum gives each ready process a turn.", "code_block": "while ready:\n  run(p, Q)\n  queue.append(p)", "language_tag": "python"},
+            {"header": "Priority & Starvation", "body": "Priority ages waiting jobs to avoid starvation. MLFQ learns burst adaptively.", "example": "Spot it: a low-priority job that never runs is starving.", "code_block": None, "language_tag": None},
         ]
     },
     {
@@ -99,9 +99,9 @@ SEEDS = [
         "cover_slide": 1,
         "likes": 55, "views": 340,
         "topics": [
-            {"header": "Why Index?", "body": "Full scan O(N) vs index O(log N). B+ tree keeps keys sorted for range queries.", "code_block": None, "language_tag": None},
-            {"header": "B+ Tree vs Hash", "body": "B+ tree for range and sort; hash for exact match only. Choose per query.", "code_block": "CREATE INDEX idx ON t(col);\nSELECT * WHERE col=10", "language_tag": "sql"},
-            {"header": "Covering Index", "body": "Include all queried cols in index — query served from index alone, no table lookup.", "code_block": None, "language_tag": None},
+            {"header": "Why Index?", "body": "Full scan O(N) vs index O(log N). B+ tree keeps keys sorted for range queries.", "example": "Example: an index turns a full table scan into a tree lookup.", "code_block": None, "language_tag": None},
+            {"header": "B+ Tree vs Hash", "body": "B+ tree for range and sort; hash for exact match only. Choose per query.", "example": "Spot it: a range query needs a B+ tree, not a hash index.", "code_block": "CREATE INDEX idx ON t(col);\nSELECT * WHERE col=10", "language_tag": "sql"},
+            {"header": "Covering Index", "body": "Include all queried cols in index — query served from index alone, no table lookup.", "example": "Example: SELECT name FROM users uses an index on (name).", "code_block": None, "language_tag": None},
         ]
     },
 ]

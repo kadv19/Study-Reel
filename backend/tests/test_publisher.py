@@ -19,7 +19,7 @@ from app.schemas import Carousel, MicroTopic, Slide
 def _sample_carousel(n=3):
     slides = [
         Slide(slide_type="text" if i % 2 == 0 else "mixed", index=i,
-              topic=MicroTopic(header=f"Topic {i}", body="Body text.", language_tag=None))
+              topic=MicroTopic(header=f"Topic {i}", body="A complete explanation that states the main idea and why it matters for exams.", language_tag=None))
         for i in range(n)
     ]
     return Carousel(carousel_id="abc123", module_name="Module 1", slides=slides)

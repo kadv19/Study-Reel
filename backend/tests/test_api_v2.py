@@ -92,7 +92,7 @@ def test_publish_end_to_end(client_ctx, monkeypatch, tmp_path, fake_publisher, a
     init_publisher_db(str(tmp_path / "pub.db"))
 
     # Persist a carousel with a PNG so the publisher has a DB row + output dir
-    topics = [MicroTopic(header="Topic A", body="Body.", language_tag=None)]
+    topics = [MicroTopic(header="Topic A", body="A complete explanation that states the main idea and why it matters for exams.", language_tag=None)]
     slides = [Slide(slide_type="text", index=0, topic=topics[0])]
     carousel = Carousel(carousel_id="abc123", module_name="Module 1", slides=slides)
     out = tmp_path / "renders" / "abc123"

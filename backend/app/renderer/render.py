@@ -164,6 +164,7 @@ def build_slide_view(slide: Slide, carousel: Carousel, index: int) -> dict:
             "slide_type": slide.slide_type,
             "header": topic.header,
             "body": topic.body,
+            "example": topic.example,
             "code": topic.code_block,
             "caption": None,
             "language": _LangView(lang),

@@ -41,7 +41,11 @@ class MicroTopic(BaseModel):
     """One micro-lesson chunk, as produced by the AI engine."""
 
     header: str = Field(..., max_length=30, description="Slide title, <= 30 chars")
-    body: str = Field(..., max_length=140, description="Body text, <= 140 chars")
+    body: str = Field(..., max_length=140, description="Body text, 60-140 chars (30-140 for code cards)")
+    example: Optional[str] = Field(
+        None, max_length=120,
+        description="Optional concrete example or quick self-test, 30-120 chars",
+    )
     code_block: Optional[str] = Field(
         None, description="Optional code snippet rendered with syntax highlighting"
     )
@@ -88,6 +92,39 @@ class MicroTopic(BaseModel):
         if v not in ALLOWED_LANGUAGES:
             raise ValueError(f"Unknown language tag: {v}")
         return v
+
+    @field_validator("example")
+    @classmethod
+    def validate_example(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) < 30:
+            raise ValueError(
+                f"example too short: write 60-120 characters (got {len(v)})"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def enforce_body_soft_min(self) -> "MicroTopic":
+        body = self.body or ""
+        if len(body) >= 60:
+            return self
+        # Diagram-only cards use a short pointer body instead of prose.
+        if self.diagram is not None and body.strip().lower() == "see diagram":
+            return self
+        min_len = 30 if self.code_block else 60
+        if len(body) < min_len:
+            if min_len == 30:
+                raise ValueError(
+                    f"body too short: write at least 30 characters for code cards (got {len(body)})"
+                )
+            raise ValueError(
+                f"body too short: write 90-140 characters (got {len(body)})"
+            )
+        return self
 
     @model_validator(mode="after")
     def require_code_if_tagged(self) -> "MicroTopic":

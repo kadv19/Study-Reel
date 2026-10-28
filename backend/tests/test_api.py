@@ -74,12 +74,12 @@ def test_generate_topics_success(client_ctx, monkeypatch, sample_pdf, auth_heade
     fake_topics = [
         MicroTopic(
             header="OSI Model",
-            body="Seven-layer reference model for network communication.",
+            body="The seven-layer reference model explains how network communication is structured end to end.",
             language_tag=None,
         ),
         MicroTopic(
             header="TCP/IP Basics",
-            body="Four-layer protocol suite powering the internet.",
+            body="The four-layer protocol suite powers the internet through practical, layered abstractions.",
             code_block="sock = socket.socket()",
             language_tag="python",
         ),
@@ -163,10 +163,10 @@ def test_render_carousel_endpoint(client_ctx, monkeypatch, sample_pdf, auth_head
         json={
             "module_name": "Module 1: Networks",
             "topics": [
-                {"header": "OSI Model", "body": "Seven-layer reference model."},
+                {"header": "OSI Model", "body": "The seven-layer reference model explains how network communication is structured end to end."},
                 {
                     "header": "TCP Sockets",
-                    "body": "Four-layer protocol suite.",
+                    "body": "The four-layer protocol suite powers the internet through practical, layered abstractions.",
                     "code_block": "import socket",
                     "language_tag": "python",
                 },
@@ -189,7 +189,7 @@ def test_render_carousel_endpoint(client_ctx, monkeypatch, sample_pdf, auth_head
 
 def test_render_carousel_rejects_over_20_topics(client_ctx, auth_headers):
     topics = [
-        {"header": f"Topic {i}", "body": "B" * 10}
+        {"header": f"Topic {i}", "body": "A complete explanation that states the main idea and why it matters."}
         for i in range(21)
     ]
     r = client_ctx.post(

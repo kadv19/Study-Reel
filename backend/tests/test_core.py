@@ -3,17 +3,17 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import Carousel, MicroTopic, Slide
+from app.schemas import Carousel, Diagram, MicroTopic, Slide
 
 
 class TestMicroTopic:
     def test_valid_topic(self):
-        t = MicroTopic(header="Arrays in C", body="Contiguous memory blocks.", code_block="int a[5];", language_tag="c")
+        t = MicroTopic(header="Arrays in C", body="Contiguous memory blocks allow constant-time indexing of array elements.", code_block="int a[5];", language_tag="c")
         assert t.header == "Arrays in C"
 
     def test_header_too_long(self):
         with pytest.raises(ValidationError):
-            MicroTopic(header="x" * 31, body="ok")
+            MicroTopic(header="x" * 31, body="Contiguous memory blocks allow constant-time indexing of array elements.")
 
     def test_body_too_long(self):
         with pytest.raises(ValidationError):
@@ -22,23 +22,59 @@ class TestMicroTopic:
     def test_code_block_too_many_lines(self):
         code = "\n".join(f"line {i}" for i in range(23))
         with pytest.raises(ValidationError):
-            MicroTopic(header="ok", body="ok", code_block=code, language_tag="python")
+            MicroTopic(header="ok", body="This example shows how the snippet works in a typical exam question.", code_block=code, language_tag="python")
 
     def test_code_line_too_long(self):
         with pytest.raises(ValidationError):
-            MicroTopic(header="ok", body="ok", code_block="y" * 63, language_tag="python")
+            MicroTopic(header="ok", body="This example shows how the snippet works in a typical exam question.", code_block="y" * 63, language_tag="python")
 
     def test_bad_language_tag(self):
         with pytest.raises(ValidationError):
-            MicroTopic(header="ok", body="ok", code_block="x", language_tag="visualbasic")
+            MicroTopic(header="ok", body="This example shows how the snippet works in a typical exam question.", code_block="x", language_tag="visualbasic")
 
     def test_code_without_tag_rejected(self):
         with pytest.raises(ValidationError):
-            MicroTopic(header="ok", body="ok", code_block="x = 1")
+            MicroTopic(header="ok", body="This example shows how the snippet works in a typical exam question.", code_block="x = 1")
 
     def test_whitespace_only_code_rejected(self):
         with pytest.raises(ValidationError):
-            MicroTopic(header="ok", body="ok", code_block="  ", language_tag="python")
+            MicroTopic(header="ok", body="This example shows how the snippet works in a typical exam question.", code_block="  ", language_tag="python")
+
+    def test_body_too_short_rejected(self):
+        with pytest.raises(ValidationError, match="body too short: write 90-140 characters"):
+            MicroTopic(header="ok", body="Too short.")
+
+    def test_see_diagram_body_is_valid(self):
+        topic = MicroTopic(
+            header="Attention Flow",
+            body="see diagram",
+            diagram=Diagram(nodes=["Query", "Key", "Value"], edges=[["Query", "Key"], ["Key", "Value"]]),
+        )
+        assert topic.body == "see diagram"
+
+    def test_code_card_allows_40_char_body(self):
+        topic = MicroTopic(
+            header="Loop basics",
+            body="A for loop repeats a block a fixed number of times.",
+            code_block="for i in range(3): print(i)",
+            language_tag="python",
+        )
+        assert 40 <= len(topic.body) < 60
+
+    def test_example_too_short_rejected(self):
+        with pytest.raises(ValidationError, match="example too short"):
+            MicroTopic(
+                header="ok",
+                body="A complete explanation states the idea and why it matters for exams.",
+                example="x" * 29,
+            )
+
+    def test_example_none_is_valid(self):
+        topic = MicroTopic(
+            header="ok",
+            body="A complete explanation states the idea and why it matters for exams.",
+        )
+        assert topic.example is None
 
 
 class TestCarousel:
@@ -46,8 +82,8 @@ class TestCarousel:
         carousel = Carousel(
             carousel_id="c1", module_name="M1",
             slides=[
-                Slide(index=0, topic=MicroTopic(header="a", body="b")),
-                Slide(index=1, topic=MicroTopic(header="c", body="d")),
+                Slide(index=0, topic=MicroTopic(header="a", body="A complete explanation states the idea and why it matters for exams.")),
+                Slide(index=1, topic=MicroTopic(header="c", body="Another complete explanation states the idea and why it matters for exams.")),
             ],
         )
         assert len(carousel.slides) == 2
@@ -57,8 +93,8 @@ class TestCarousel:
             Carousel(
                 carousel_id="c1", module_name="M1",
                 slides=[
-                    Slide(index=1, topic=MicroTopic(header="a", body="b")),
-                    Slide(index=0, topic=MicroTopic(header="c", body="d")),
+                    Slide(index=1, topic=MicroTopic(header="a", body="A complete explanation states the idea and why it matters for exams.")),
+                    Slide(index=0, topic=MicroTopic(header="c", body="Another complete explanation states the idea and why it matters for exams.")),
                 ],
             )
 
