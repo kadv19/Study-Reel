@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>StudyReel — Inside a module (reference)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<!--
+  REFERENCE IMPLEMENTATION for the "Inside a module" deck screen.
+  Plain HTML/CSS/JS, no dependencies, mock data. Port the CSS and the three functions
+  fitFace(), fileCard(), rewind() into instaclone/deck.html + static/deck.js.
+  Open it in a browser at phone width to try it: swipe buttons, Rewind, arrow keys.
+-->
+<style>
+  :root{ --bg:#0a0e1a; --surface:#0f1729; --panel:#182234; --border:#1e2d4a; --cyan:#38bdf8; --indigo:#818cf8; --amber:#fbbf24; --green:#34d399; --text:#eef2f8; --muted:#8b9bb4; --card:#f4ecd8; --card-ink:#2a2116; }
+  *{box-sizing:border-box;}
+  html,body{margin:0; height:100%;}
+  body{ font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center;
+        background-image:radial-gradient(circle at 12% 4%, rgba(56,189,248,.10), transparent 45%), radial-gradient(circle at 92% 60%, rgba(129,140,248,.08), transparent 42%); }
+  .mono{font-family:'Fira Code',monospace;}
+
+  /* ---- screen: fills the viewport so the card gets every spare pixel ---- */
+  .deck-screen{ width:100%; max-width:420px; height:100dvh; display:flex; flex-direction:column; gap:14px;
+                padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 16px); }
+  .dk-top{ display:flex; align-items:center; justify-content:space-between; }
+  .dk-back{ display:flex; align-items:center; gap:6px; min-height:44px; padding:0 16px 0 10px; border-radius:22px; background:var(--surface); border:1px solid var(--border); color:var(--text); font:600 14px 'Inter',sans-serif; cursor:pointer; }
+  .dk-book{ font-size:13px; font-weight:600; color:#cfd8e6; }
+  .dk-mod{ display:flex; align-items:center; gap:12px; }
+  .dk-num{ width:46px; height:46px; border-radius:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:700 28px 'Fraunces',serif; color:#fff; background:linear-gradient(160deg,#1f6f5c,#0f3d33); }
+  .dk-kicker{ font-size:11px; font-weight:700; letter-spacing:.12em; color:#9fb0c8; }
+  .dk-name{ font:600 23px/1.1 'Fraunces',serif; }
+  .dk-segs{ display:flex; gap:4px; padding:2px 0; }
+  .dk-segs i{ flex:1; height:8px; border-radius:4px; background:#2a3a58; transition:background .25s, box-shadow .25s; }
+  .dk-segs i.got{background:var(--green);} .dk-segs i.review{background:var(--amber);}
+  .dk-segs i.cur{ box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--cyan); }
+
+  /* ---- card area ---- */
+  .stack{ position:relative; flex:1; min-height:0; }
+  .stack::after{ content:''; position:absolute; left:14px; right:14px; bottom:-8px; height:40px; border-radius:0 0 14px 14px; background:#d9cdb0; opacity:.55; z-index:0; }
+  .card{ position:absolute; inset:0 0 6px 0; z-index:1; border-radius:16px; perspective:1200px; touch-action:none;
+         transition:transform .38s cubic-bezier(.2,0,0,1), opacity .32s; }
+  .card.no-anim{ transition:none; }
+  .flipinner{ position:relative; width:100%; height:100%; transform-style:preserve-3d; transition:transform .5s cubic-bezier(.4,.2,.2,1); }
+  .flipinner.flipped{ transform:rotateY(180deg); }
+  .face{ position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:16px; overflow:hidden; display:flex; flex-direction:column;
+         background-color:var(--card); color:var(--card-ink);
+         background-image:repeating-linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.05) 1px, transparent 1px, transparent 28px);
+         box-shadow:0 18px 40px rgba(0,0,0,.4); }
+  .face.back{ transform:rotateY(180deg); background-color:#eee0c4; }
+  .punch{ position:absolute; top:18px; left:18px; width:11px; height:11px; border-radius:50%; background:var(--bg); }
+  .ribbon{ position:absolute; top:0; right:22px; width:16px; height:34px; background:linear-gradient(180deg,#e24b4a,#b8322f); clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); }
+  .cardhead{ display:flex; align-items:center; gap:8px; padding:16px 52px 6px 42px; flex-shrink:0; }
+  .tab{ font-size:12px; font-weight:700; padding:4px 10px; border-radius:14px; background:rgba(0,0,0,.07); }
+
+  /* THE KEY PART: .cardbody is a flex column; .cardfit (the content group) is sized by JS and
+     centred with margin-block:auto, so short content is centred and large instead of top-heavy
+     with a hole underneath. */
+  .cardbody{ flex:1; min-height:0; display:flex; flex-direction:column; padding:8px 26px 16px 42px; overflow-y:auto; overscroll-behavior:contain; }
+  .cardfit{ flex:none; margin-block:auto; }
+  .cardfit h2{ margin:0 0 .5em; font-family:'Fraunces',serif; font-weight:600; letter-spacing:-.01em; line-height:1.1; }
+  .cardfit p{ margin:0 0 .8em; line-height:1.5; color:#3a2e1f; }
+  .cardfit .spot{ padding:.7em .85em; border-radius:12px; background:rgba(0,0,0,.07); line-height:1.45; color:#3a2e1f; }
+  .cardfit .spot b{ font-weight:700; }
+  .cardfit .code{ font-family:'Fira Code',monospace; padding:.8em .9em; border-radius:10px; background:rgba(0,0,0,.88); color:#9ece6a; line-height:1.5; white-space:pre-wrap; word-break:break-word; margin:0 0 .8em; }
+  .diagram{ display:flex; flex-direction:column; align-items:stretch; gap:.35em; margin:0 0 .8em; }
+  .diagram .node{ background:#fffaf0; border:1px solid rgba(0,0,0,.18); border-radius:9px; padding:.5em .7em; font-weight:600; text-align:center; }
+  .diagram .arrow{ text-align:center; line-height:.8; color:#8a5a00; }
+
+  .cardfoot{ display:flex; align-items:center; justify-content:space-between; padding:8px 20px 14px 42px; border-top:1px dashed rgba(0,0,0,.18); flex-shrink:0; }
+  .weight{ display:flex; align-items:center; gap:6px; font-size:13px; color:#4a3d2a; }
+  .weight .d{ width:8px; height:8px; border-radius:4px; background:#4a3d2a; opacity:.28; } .weight .d.on{ opacity:1; }
+  .weight .hy{ font-weight:700; color:#8a5a00; }
+  .flipbtn{ display:flex; align-items:center; gap:6px; min-height:44px; padding:0 16px; border:0; border-radius:22px; background:rgba(0,0,0,.08); color:var(--card-ink); font:700 14px 'Inter',sans-serif; cursor:pointer; }
+
+  /* ---- action row: Review | Rewind | Got it ---- */
+  .actions{ display:flex; gap:12px; align-items:center; }
+  .act{ flex:1; height:62px; border-radius:16px; background:var(--surface); border:1px solid var(--border); color:var(--text); display:flex; align-items:center; justify-content:center; gap:10px; font:700 16px 'Inter',sans-serif; cursor:pointer; }
+  .act:active{ transform:scale(.98); }
+  .rewind{ flex:none; width:62px; height:62px; border-radius:31px; background:var(--panel); border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
+  .rewind[aria-disabled="true"]{ border-color:#2a3d5f; opacity:.45; cursor:default; }
+  .rewind[aria-disabled="true"] svg{ stroke:#6f819d; }
+  .act:focus-visible,.rewind:focus-visible,.flipbtn:focus-visible,.dk-back:focus-visible{ outline:3px solid var(--cyan); outline-offset:2px; }
+  .hint{ text-align:center; font-size:12.5px; color:var(--muted); min-height:16px; }
+</style>
+</head>
+<body>
+<div class="deck-screen">
+  <div class="dk-top">
+    <button class="dk-back" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Modules</button>
+    <div class="dk-book">Database Management</div>
+  </div>
+  <div class="dk-mod">
+    <div class="dk-num">3</div>
+    <div style="min-width:0;flex:1">
+      <div class="dk-kicker" id="kicker">MODULE 3 · CARD 1 OF 6</div>
+      <div class="dk-name">Normalization</div>
+    </div>
+  </div>
+  <div class="dk-segs" id="segs" aria-label="Module progress"></div>
+
+  <div class="stack" id="stack">
+    <div class="card" id="card">
+      <div class="flipinner" id="flipinner">
+        <div class="face front" id="front"></div>
+        <div class="face back" id="back"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="act" type="button" id="btnReview"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5 M11 6l-6 6 6 6"/></svg>Review</button>
+    <button class="rewind" type="button" id="btnRewind" aria-label="Bring back the last card" aria-disabled="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+    <button class="act" type="button" id="btnGot">Got it<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6"/></svg></button>
+  </div>
+  <div class="hint" id="hint">swipe left to review again · swipe right when you've got it</div>
+</div>
+
+<script>
+/* ---------------- mock data: deliberately varied lengths ---------------- */
+const CARDS = [
+  { header:'ACID', body:'Atomicity, Consistency, Isolation, Durability.', w:3 },
+  { header:'Primary Key', body:'A column that uniquely identifies every row. It can never be NULL or repeat.', example:'Student(USN): no two students share a USN.', w:3 },
+  { header:'First Normal Form (1NF)', body:'A table is in 1NF when every cell holds exactly one value. No lists inside a cell, and no repeating columns like phone1, phone2.', example:'If you want to write "A, B" in one cell, it is not in 1NF.', w:3 },
+  { header:'INNER JOIN', body:'Keeps only the rows that match in both tables.', code:'SELECT s.name, d.title\nFROM student s\nINNER JOIN dept d\n  ON s.dept_id = d.id;', w:2 },
+  { header:'Transaction States', body:'', diagram:['Active','Partially Committed','Committed'], w:2 },
+  { header:'Boyce-Codd Normal Form', body:'A table is in BCNF if, for every functional dependency X to Y, X is a superkey of the table, with no exceptions.', example:'Stricter than 3NF: removes the last overlapping-key anomalies.', w:1 }
+];
+// back faces
+CARDS.forEach(c => { c.back_header = 'Exam trap'; c.back_body = c.back_body || 'Examiners ask you to name the violated rule, not just fix the table.'; });
+
+/* ---------------- state ---------------- */
+const status = CARDS.map(() => 'unfiled');       // server truth, per card
+let index = 0;                                   // current card
+const history = [];                              // [{ i, prev, kind }]   (rewind stack, newest last)
+let busy = false;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
+
+/* ---------------- render ---------------- */
+function faceHTML(c, back){
+  if (back) return `<div class="punch"></div>
+    <div class="cardhead"><span class="tab">${esc(c.back_header)}</span></div>
+    <div class="cardbody"><div class="cardfit"><h2>${esc(c.back_header)}</h2><p>${esc(c.back_body)}</p></div></div>
+    <div class="cardfoot"><span class="weight">exam weight ${dots(c.w)}</span><button class="flipbtn" type="button" data-flip>Flip</button></div>`;
+  const diagram = c.diagram ? `<div class="diagram">${c.diagram.map((n,k)=>`<div class="node">${esc(n)}</div>${k<c.diagram.length-1?'<div class="arrow">↓</div>':''}`).join('')}</div>` : '';
+  return `<div class="punch"></div><div class="ribbon"></div>
+    <div class="cardhead"><span class="tab">${readTime(c)}s read</span></div>
+    <div class="cardbody"><div class="cardfit">
+      <h2>${esc(c.header)}</h2>${c.body?`<p>${esc(c.body)}</p>`:''}${diagram}${c.code?`<pre class="code">${esc(c.code)}</pre>`:''}${c.example?`<div class="spot"><b>Spot it:</b> ${esc(c.example)}</div>`:''}
+    </div></div>
+    <div class="cardfoot"><span class="weight">exam weight ${dots(c.w)}${c.w===3?'<span class="hy">high-yield</span>':''}</span><button class="flipbtn" type="button" data-flip>Flip</button></div>`;
+}
+const dots = w => [1,2,3].map(n=>`<span class="d ${n<=w?'on':''}"></span>`).join('');
+// honest read time (the old UI showed a random number): ~200 wpm
+function readTime(c){ const words = [c.header,c.body,c.example,c.code].join(' ').trim().split(/\s+/).length; return Math.max(10, Math.round(words / 200 * 60)); }
+
+function render(){
+  const c = CARDS[index];
+  $('front').innerHTML = faceHTML(c,false);
+  $('back').innerHTML  = faceHTML(c,true);
+  $('flipinner').classList.remove('flipped');
+  $('kicker').textContent = `MODULE 3 · CARD ${index+1} OF ${CARDS.length}`;
+  $('segs').innerHTML = status.map((s,k)=>`<i class="${s==='mastered'?'got':s==='review'?'review':''} ${k===index?'cur':''}"></i>`).join('');
+  const rw = $('btnRewind'); rw.setAttribute('aria-disabled', history.length ? 'false' : 'true');
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(()=>{ fitFace($('front')); fitFace($('back')); });
+}
+
+/* ---------------- FIT: biggest type that fits, content centred, never a hole ---------------- */
+function fitFace(face){
+  const body = face.querySelector('.cardbody'), fit = face.querySelector('.cardfit');
+  if (!body || !fit) return;
+  const dense = !!fit.querySelector('.code, .diagram');
+  const MAX = dense ? {h:32,p:21,s:17,c:15} : {h:46,p:31,s:22,c:14};
+  const MIN = {h:21,p:15,s:13,c:12};
+  const cs = getComputedStyle(body);
+  const avail = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const set = s => {
+    fit.querySelectorAll('h2').forEach(e => e.style.fontSize = (MIN.h + (MAX.h-MIN.h)*s) + 'px');
+    fit.querySelectorAll('p').forEach(e => e.style.fontSize = (MIN.p + (MAX.p-MIN.p)*s) + 'px');
+    fit.querySelectorAll('.spot,.diagram').forEach(e => e.style.fontSize = (MIN.s + (MAX.s-MIN.s)*s) + 'px');
+    fit.querySelectorAll('.code').forEach(e => e.style.fontSize = (MIN.c + (MAX.c-MIN.c)*s) + 'px');
+  };
+  let lo = 0, hi = 1, best = 0;
+  for (let k = 0; k < 9; k++){ const mid = (lo+hi)/2; set(mid); if (fit.offsetHeight <= avail) { best = mid; lo = mid; } else hi = mid; }
+  set(best);   // if even best=0 overflows, .cardbody scrolls (overflow-y:auto)
+}
+let rz; addEventListener('resize', ()=>{ clearTimeout(rz); rz = setTimeout(()=>{ fitFace($('front')); fitFace($('back')); }, 80); });
+
+/* ---------------- file + rewind (mock "server": swap for real fetch calls) ---------------- */
+const api = { async file(i, st){ await new Promise(r=>setTimeout(r,60)); status[i] = st; } };   // st: 'review' | 'mastered' | 'unfiled'
+
+async function fileCard(kind){            // kind: 'review' | 'mastered'
+  if (busy || index >= CARDS.length) return; busy = true;
+  const i = index, prev = status[i], card = $('card');
+  card.classList.remove('no-anim');
+  card.style.transform = kind === 'mastered' ? 'translateX(160%) rotate(16deg)' : 'translateX(-160%) rotate(-16deg)';
+  card.style.opacity = '0';
+  try { await api.file(i, kind); } catch(e){ card.style.transform=''; card.style.opacity='1'; busy=false; return; }
+  history.push({ i, prev, kind });
+  if (history.length > 50) history.shift();
+  setTimeout(()=>{ card.classList.add('no-anim'); card.style.transform=''; card.style.opacity='1'; void card.offsetWidth; card.classList.remove('no-anim');
+                   index = Math.min(index+1, CARDS.length-1); if (i === CARDS.length-1) { $('hint').textContent = 'Module cleared. Rewind to look again.'; } render(); busy = false; }, 360);
+}
+
+async function rewind(){
+  if (busy || !history.length) return; busy = true;
+  const h = history[history.length-1], card = $('card');
+  try { await api.file(h.i, h.prev); } catch(e){ busy=false; return; }   // prev may be 'unfiled' -> backend deletes the row
+  history.pop();
+  index = h.i;
+  // fly the card back in from the side it left
+  card.classList.add('no-anim');
+  card.style.transform = h.kind === 'mastered' ? 'translateX(160%) rotate(16deg)' : 'translateX(-160%) rotate(-16deg)';
+  card.style.opacity = '0';
+  render(); void card.offsetWidth;
+  card.classList.remove('no-anim'); card.style.transform=''; card.style.opacity='1';
+  $('hint').textContent = 'swipe left to review again · swipe right when you\'ve got it';
+  busy = false;
+}
+
+/* ---------------- wiring ---------------- */
+$('btnReview').onclick = () => fileCard('review');
+$('btnGot').onclick    = () => fileCard('mastered');
+$('btnRewind').onclick = rewind;
+document.addEventListener('click', e => { if (e.target.closest('[data-flip]')) $('flipinner').classList.toggle('flipped'); });
+addEventListener('keydown', e => { if (e.key==='ArrowLeft') fileCard('review'); else if (e.key==='ArrowRight') fileCard('mastered'); else if (e.key==='Backspace' || e.key==='z') rewind(); });
+const q = new URLSearchParams(location.search); if (q.has('i')) index = Math.min(+q.get('i') || 0, CARDS.length-1);
+render();
+</script>
+</body>
+</html>

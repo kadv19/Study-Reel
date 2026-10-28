@@ -8,12 +8,17 @@ let books = [];
 let shelves = [];
 let activeBook = null;
 let activeShelf = null;
+let activeModuleNo = 1;
 let deck = null;
 let deckIndex = 0;
 let flipped = false;
 let replayMode = false;
 let deepLinkHandled = false;
 let historyDeckRestored = false;
+const rewindHistory = [];
+let busy = false;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
 const libraryView = document.getElementById('libraryView');
 const bookView = document.getElementById('bookView');
@@ -21,22 +26,25 @@ const bookRow = document.getElementById('bookRow');
 const libraryEmpty = document.getElementById('libraryEmpty');
 const libraryCount = document.getElementById('libraryCount');
 const bookTitleEl = document.getElementById('bookTitle');
-const shelfRow = document.getElementById('shelfrow');
 const shelfNameEl = document.getElementById('shelfName');
+const moduleNumEl = document.getElementById('moduleNum');
+const kickerEl = document.getElementById('kicker');
+const segsEl = document.getElementById('segs');
 const topCard = document.getElementById('topCard');
 const flipInner = document.getElementById('flipInner');
 const faceFront = document.getElementById('faceFront');
 const faceBack = document.getElementById('faceBack');
 const zones = { review: document.getElementById('zoneReview'), mastered: document.getElementById('zoneMastered'), replay: document.getElementById('zoneReplay') };
-const trays = { review: document.getElementById('trayReview'), mastered: document.getElementById('trayMastered') };
+const actionButtons = { review: document.getElementById('btnReview'), mastered: document.getElementById('btnGot') };
+const rewindBtn = document.getElementById('btnRewind');
+const actionsRow = document.getElementById('actionsRow');
+const deckHint = document.getElementById('deckHint');
 const back2 = document.getElementById('back2');
 const back3 = document.getElementById('back3');
 const emptyMsg = document.getElementById('emptyMsg');
 const emptyTextEl = emptyMsg ? emptyMsg.querySelector('.empty-text') : null;
 const replayBtn = document.getElementById('replayBtn');
 const uploadLink = document.getElementById('uploadLink');
-const traysRow = document.querySelector('.trays');
-const dragTipEl = document.getElementById('dragTip');
 const accountNameEl = document.getElementById('accountName');
 const accountCollegeEl = document.getElementById('accountCollege');
 
@@ -101,11 +109,12 @@ function showLibrary(opts){
     history.replaceState({srView:'library'}, '');
   }
   replayMode = false;
-  // reset trays/dragTip visibility for next book open (will be shown after shelf select)
+  rewindHistory.length = 0;
+  busy = false;
+  document.body.classList.remove('deck-open');
   if(libraryView) libraryView.style.display='block';
   if(bookView) bookView.style.display='none';
   if(replayBtn) replayBtn.classList.remove('show');
-  // refresh library to update progress
   loadLibrary();
 }
 window.showLibrary = showLibrary;
@@ -125,18 +134,22 @@ function openBook(bookId, opts){
   }
   activeBook = b;
   replayMode = false;
+  rewindHistory.length = 0;
+  busy = false;
+  document.body.classList.add('deck-open');
   if(bookTitleEl) bookTitleEl.textContent = b.label;
   if(libraryView) libraryView.style.display='none';
   if(bookView) bookView.style.display='flex';
   // filter shelves for this book
   const scoped = shelves.filter(s=> String(s.syllabus_id)===String(b.syllabus_id) || String(s.syllabus_id)===String(b.book_id));
-  renderShelfRow(scoped);
   if(scoped.length){
     const preferred = opts.shelfId && scoped.find(s=> String(s.shelf_id)===String(opts.shelfId));
     selectShelf(preferred ? preferred.shelf_id : scoped[0].shelf_id, {fromPop: opts.fromPop});
   } else {
-    shelfRow.innerHTML = '<span style="font-size:11px;color:var(--muted)">No shelves in this book — render a module first</span>';
-    shelfNameEl.textContent = b.label + ' — no shelves';
+    if(shelfNameEl) shelfNameEl.textContent = b.label + ' — no shelves';
+    if(moduleNumEl) moduleNumEl.textContent = '1';
+    if(kickerEl) kickerEl.textContent = 'MODULE 1 · CARD 0 OF 0';
+    renderSegs();
     setEmptyState(true, 'No cards in this shelf — upload a syllabus and render.', false);
   }
 }
@@ -244,23 +257,17 @@ function renderLibrary(){
   });
 }
 
-function renderShelfRow(scoped){
-  if(!shelfRow) return;
-  shelfRow.innerHTML='';
-  if(!scoped.length){
-    shelfRow.innerHTML = '<span style="font-size:11px;color:var(--muted)">No shelves in this book</span>';
-    return;
+function moduleNumberFor(shelf){
+  if(!shelf) return 1;
+  const raw = `${shelf.module_name || ''} ${shelf.label || ''}`;
+  const m = raw.match(/module\s*(\d+)/i);
+  if(m) return parseInt(m[1], 10);
+  if(activeBook){
+    const scoped = shelves.filter(s=> String(s.syllabus_id)===String(activeBook.syllabus_id) || String(s.syllabus_id)===String(activeBook.book_id));
+    const idx = scoped.findIndex(s=> String(s.shelf_id)===String(shelf.shelf_id));
+    if(idx >= 0) return idx + 1;
   }
-  scoped.forEach((s,i)=>{
-    const el=document.createElement('div');
-    el.className='spine'+(i===0?' active':'');
-    el.dataset.shelf=s.shelf_id;
-    const pillLabel = s.module_name || (s.label.includes(' — ') ? s.label.split(' — ').pop() : s.label);
-    el.innerHTML=`<span class="vlabel">${pillLabel.replace(/</g,'&lt;')}</span><div class="fillcap" style="--fill-pct:${Math.round(s.fill_pct*100)}%"></div>`;
-    el.title=s.label;
-    el.onclick=()=> selectShelf(s.shelf_id);
-    shelfRow.appendChild(el);
-  });
+  return 1;
 }
 
 function setEmptyState(show, message, showReplay){
@@ -271,10 +278,8 @@ function setEmptyState(show, message, showReplay){
     topCard.style.display='none';
     back2.style.display='none';
     back3.style.display='none';
-    if(!replayMode){
-      if(traysRow) traysRow.style.display='none';
-      if(dragTipEl) dragTipEl.style.display='none';
-    }
+    if(actionsRow) actionsRow.style.display='none';
+    if(deckHint) deckHint.style.display='none';
     if(replayBtn){
       if(showReplay) replayBtn.classList.add('show');
       else replayBtn.classList.remove('show');
@@ -288,16 +293,14 @@ function setEmptyState(show, message, showReplay){
     topCard.style.display='';
     back2.style.display='';
     back3.style.display='';
-    // trays visibility depends on replayMode
-    if(replayMode){
-      if(traysRow) traysRow.style.display='none';
-      if(dragTipEl) { dragTipEl.style.display='flex'; dragTipEl.textContent='replay — swipe up to continue ↺'; }
-    } else {
-      if(traysRow) traysRow.style.display='flex';
-      if(dragTipEl) { dragTipEl.style.display='flex'; dragTipEl.textContent='try dragging the card toward a tray'; }
+    if(actionsRow) actionsRow.style.display='flex';
+    if(deckHint){
+      deckHint.style.display='block';
+      deckHint.textContent = replayMode ? 'replay — swipe up to continue ↺' : "swipe left to review again · swipe right when you've got it";
     }
     if(replayBtn) replayBtn.classList.remove('show');
   }
+  updateActionState();
 }
 
 async function loadLibrary(){
@@ -338,22 +341,21 @@ async function loadLibrary(){
 
 async function selectShelf(shelfId, opts){
   opts = opts || {};
-  // leaving shelf resets replayMode
   replayMode = false;
-  document.querySelectorAll('.spine').forEach(el=>el.classList.toggle('active', el.dataset.shelf===shelfId));
+  rewindHistory.length = 0;
+  busy = false;
   activeShelf = shelves.find(s=>s.shelf_id===shelfId);
-  // also check scoped? if not found, search all shelves
   if(!activeShelf) activeShelf = shelves.find(s=> String(s.shelf_id)===String(shelfId));
   if(!opts.fromPop && history.state && history.state.srView==='deck'){
     history.replaceState({...history.state, shelfId: shelfId}, '');
   }
+  activeModuleNo = moduleNumberFor(activeShelf);
+  if(moduleNumEl) moduleNumEl.textContent = String(activeModuleNo);
   if(shelfNameEl) shelfNameEl.textContent = activeShelf ? (activeShelf.module_name || activeShelf.label) : shelfId;
+  if(kickerEl) kickerEl.textContent = `MODULE ${activeModuleNo} · CARD 1 OF 1`;
   deckIndex = 0;
   flipped = false;
   if(flipInner) flipInner.classList.remove('flipped');
-  // ensure trays visible for normal mode
-  if(traysRow) traysRow.style.display='flex';
-  if(dragTipEl){ dragTipEl.style.display='flex'; dragTipEl.textContent='try dragging the card toward a tray'; }
   if(replayBtn) replayBtn.classList.remove('show');
   await loadDeck(shelfId, false);
 }
@@ -367,7 +369,8 @@ async function loadDeck(shelfId, isReplay){
     const deckText = await res.text();
     deck = JSON.parse(deckText);
     if(!deck.cards || deck.cards.length===0){
-      // distinguish: if replay requested but still empty => truly no cards
+      renderSegs();
+      if(kickerEl) kickerEl.textContent = `MODULE ${activeModuleNo} · CARD 0 OF 0`;
       setEmptyState(true, 'No cards in this shelf — upload a syllabus and render.', false);
       return;
     }
@@ -385,17 +388,17 @@ function currentCard(){
   return deck.cards[deckIndex];
 }
 
-function renderStack(){
+function renderStack(resetCard=true){
   const card = currentCard();
   if(!card){
+    renderSegs();
+    updateKicker();
     if(replayMode){
-      // replay also exhausted — show end of replay with option to go back
       setEmptyState(true, 'End of replay — all cards seen again.', true);
       if(emptyTextEl) emptyTextEl.textContent='End of replay — all cards seen again.';
       if(replayBtn){ replayBtn.textContent='Replay again ↻'; replayBtn.classList.add('show'); }
       return;
     }
-    // normal exhaustion — show replay button instead of static empty
     setEmptyState(true, 'Shelf cleared — every card filed. Review your work?', true);
     if(replayBtn){ replayBtn.textContent='See it again ↻'; replayBtn.classList.add('show'); }
     if(uploadLink) uploadLink.style.display='none';
@@ -406,59 +409,124 @@ function renderStack(){
   const next2 = deck.cards[deckIndex+2];
   if(back2) back2.style.background = next1 ? 'var(--card)' : 'transparent';
   if(back3) back3.style.background = next2 ? 'var(--card)' : 'transparent';
-  const ft = card.front, bk = card.back;
-  const weightDots = (w)=>{
-    const map={low:1, medium:2, high:3};
-    const n=map[w]||2;
-    return `<span class="dot ${n>=1?'on':''}"></span><span class="dot ${n>=2?'on':''}"></span><span class="dot ${n>=3?'on':''}"></span>`;
-  };
-  // diagram support — compact stacked boxes (denser for phone so trays stay visible)
-  let diagramHtml = '';
-  if(ft.diagram && ft.diagram.nodes && ft.diagram.nodes.length){
-    const nodes = ft.diagram.nodes;
-    const edges = ft.diagram.edges || [];
-    diagramHtml = '<div class="diagram" style="display:flex;flex-direction:column;gap:4px;margin:6px 0 8px;">' +
-      nodes.map((n,i)=>{
-        const safe = String(n).replace(/</g,'&lt;');
-        const box = `<div style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:7px;font-weight:600;font-size:11.5px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">${safe}</div>`;
-        const showArrow = i < nodes.length - 1;
-        const arrow = showArrow ? '<div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin:1px 0"><div style="width:2px;height:8px;background:var(--cyan);opacity:0.55;border-radius:9999px"></div><div style="color:var(--cyan);font-size:10px;line-height:1">↓</div></div>' : '';
-        return box + arrow;
-      }).join('') +
-      (edges.length ? `<div style="font-size:9.5px;color:var(--muted);text-align:center;margin-top:3px;opacity:0.7;word-break:break-word">${edges.map(e=> `${String(e[0]).replace(/</g,'&lt;')} → ${String(e[1]).replace(/</g,'&lt;')}`).join(' · ')}</div>` : '') +
-      '</div>';
-  }
-  let bodyHtml = '';
-  const bodyIsSeeDiagram = ft.body && ft.body.trim().toLowerCase() === 'see diagram';
-  if(ft.diagram && bodyIsSeeDiagram){ bodyHtml = ''; }
-  else if(ft.body){ bodyHtml = `<p>${ft.body}</p>`; }
-  if(faceFront) faceFront.innerHTML = `
-    <div class="punch"></div><div class="ribbon"></div>
-    <div class="cardhead"><span class="tab mono">${card.post_id.slice(0,4)} · ${ft.slide_number}/${ft.total_slides}</span><span class="tab">${Math.round(30 + Math.random()*10)}s read</span></div>
-    <div class="cardbody"><h2>${ft.header}</h2>${diagramHtml}${bodyHtml}${ft.code?`<div class="code mono">${ft.code.replace(/</g,'&lt;')}</div>`:''}</div>
-    <div class="cardfoot"><span class="weight">exam weight ${weightDots(card.exam_weight||bk.exam_weight)}</span><button class="flipbtn" onclick="flipCard(event)">flip ↻</button></div>
-  `;
-  if(faceBack) faceBack.innerHTML = `
-    <div class="punch"></div>
-    <div class="cardhead"><span class="tab mono">${bk.back_header||'WHY IT MATTERS'}</span></div>
-    <div class="cardbody"><h2>${bk.back_header||'Why it matters'}</h2><p>${bk.back_body||'Recall this for VTU.'}</p>${ft.code?`<div class="code mono">${bk.exam_weight? 'Weight: '+bk.exam_weight : ''}</div>`:''}</div>
-    <div class="cardfoot"><span class="weight">exam weight ${weightDots(bk.exam_weight)}</span><div class="cardactions"><button class="reportbtn" type="button" data-card-id="${card.card_key}" aria-label="Report wrong card" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" onclick="reportWrongCard(event, this)">Report wrong card</button><button class="flipbtn" onclick="flipCard(event)">flip ↻</button></div></div>
-  `;
-  if(topCard){
-    topCard.style.transition='none';
+  if(faceFront) faceFront.innerHTML = faceHTML(card, false);
+  if(faceBack) faceBack.innerHTML = faceHTML(card, true);
+  if(topCard && resetCard){
+    topCard.classList.add('no-anim');
     topCard.style.transform='';
     topCard.style.opacity='1';
     flipped=false;
     if(flipInner) flipInner.classList.remove('flipped');
     void topCard.offsetWidth;
     topCard.style.transition='';
+    topCard.classList.remove('no-anim');
   }
-  // in replay mode, ensure trays stay hidden
-  if(replayMode){
-    if(traysRow) traysRow.style.display='none';
-    if(dragTipEl){ dragTipEl.style.display='flex'; dragTipEl.textContent='replay — swipe up to continue ↺'; }
-  }
+  renderSegs();
+  updateKicker();
+  updateActionState();
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(()=>{
+    fitFace(faceFront);
+    fitFace(faceBack);
+  });
 }
+
+const weightNum = w => ({low:1, medium:2, high:3})[w] || 2;
+const dots = w => [1,2,3].map(n=>`<span class="dot ${n<=w?'on':''}"></span>`).join('');
+
+function readTime(card){
+  const ft = card.front || {}, bk = card.back || {};
+  const words = [ft.header, ft.body, ft.code, ft.example, bk.back_header, bk.back_body]
+    .filter(Boolean).join(' ').trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(10, Math.round(words / 200 * 60));
+}
+
+function faceHTML(card, back){
+  const ft = card.front || {};
+  const bk = card.back || {};
+  if(back){
+    const header = bk.back_header || 'Why it matters';
+    const body = bk.back_body || 'Recall this for VTU.';
+    return `<div class="punch"></div>
+      <div class="cardhead"><span class="tab mono">${esc(String(header).toUpperCase())}</span></div>
+      <div class="cardbody"><div class="cardfit"><h2>${esc(header)}</h2><p>${esc(body)}</p></div></div>
+      <div class="cardfoot"><span class="weight">exam weight ${dots(weightNum(bk.exam_weight))}</span><div class="cardactions"><button class="reportbtn" type="button" data-card-id="${esc(card.card_key)}" aria-label="Report wrong card" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" ontouchstart="event.stopPropagation()" ontouchend="event.stopPropagation()" onclick="reportWrongCard(event, this)">Report wrong card</button><button class="flipbtn" type="button" onclick="flipCard(event)">flip ↻</button></div></div>`;
+  }
+  let diagramHtml = '';
+  if(ft.diagram && ft.diagram.nodes && ft.diagram.nodes.length){
+    const nodes = ft.diagram.nodes;
+    const edges = ft.diagram.edges || [];
+    diagramHtml = '<div class="diagram">' +
+      nodes.map((n,i)=>`<div class="node">${esc(n)}</div>${i < nodes.length - 1 ? '<div class="arrow">↓</div>' : ''}`).join('') +
+      (edges.length ? `<div class="edges">${edges.map(e=> `${esc(e[0])} → ${esc(e[1])}`).join(' · ')}</div>` : '') +
+      '</div>';
+  }
+  let bodyHtml = '';
+  const bodyIsSeeDiagram = ft.body && String(ft.body).trim().toLowerCase() === 'see diagram';
+  if(ft.diagram && bodyIsSeeDiagram){ bodyHtml = ''; }
+  else if(ft.body){ bodyHtml = `<p>${esc(ft.body)}</p>`; }
+  const codeHtml = ft.code ? `<pre class="code mono">${esc(ft.code)}</pre>` : '';
+  const exampleHtml = ft.example ? `<div class="spot"><b>Spot it:</b> ${esc(ft.example)}</div>` : '';
+  const w = weightNum(card.exam_weight || bk.exam_weight);
+  return `<div class="punch"></div><div class="ribbon"></div>
+    <div class="cardhead"><span class="tab mono">${esc(String(card.post_id || '').slice(0,4))} · ${esc(ft.slide_number)}/${esc(ft.total_slides)}</span><span class="tab">${readTime(card)}s read</span></div>
+    <div class="cardbody"><div class="cardfit">
+      <h2>${esc(ft.header || 'Untitled')}</h2>${bodyHtml}${diagramHtml}${codeHtml}${exampleHtml}
+    </div></div>
+    <div class="cardfoot"><span class="weight">exam weight ${dots(w)}${w===3?'<span class="hy">high-yield</span>':''}</span><button class="flipbtn" type="button" onclick="flipCard(event)">flip ↻</button></div>`;
+}
+
+function fitFace(face){
+  if(!face) return;
+  const body = face.querySelector('.cardbody'), fit = face.querySelector('.cardfit');
+  if (!body || !fit) return;
+  const dense = !!fit.querySelector('.code, .diagram');
+  const MAX = dense ? {h:32,p:21,s:17,c:15} : {h:46,p:31,s:22,c:14};
+  const MIN = {h:21,p:15,s:13,c:12};
+  const cs = getComputedStyle(body);
+  const avail = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const set = s => {
+    fit.querySelectorAll('h2').forEach(e => e.style.fontSize = (MIN.h + (MAX.h-MIN.h)*s) + 'px');
+    fit.querySelectorAll('p').forEach(e => e.style.fontSize = (MIN.p + (MAX.p-MIN.p)*s) + 'px');
+    fit.querySelectorAll('.spot,.diagram').forEach(e => e.style.fontSize = (MIN.s + (MAX.s-MIN.s)*s) + 'px');
+    fit.querySelectorAll('.code').forEach(e => e.style.fontSize = (MIN.c + (MAX.c-MIN.c)*s) + 'px');
+  };
+  let lo = 0, hi = 1, best = 0;
+  for (let k = 0; k < 9; k++){ const mid = (lo+hi)/2; set(mid); if (fit.offsetHeight <= avail) { best = mid; lo = mid; } else hi = mid; }
+  set(best);
+}
+
+function renderSegs(){
+  if(!segsEl) return;
+  const prog = (deck && deck.progress) || [];
+  const cur = currentCard() ? currentCard().slide_index : -1;
+  segsEl.innerHTML = prog.map((s,k)=>`<i class="${s==='mastered'?'got':s==='review'?'review':''} ${k===cur?'cur':''}"></i>`).join('');
+}
+
+function updateKicker(){
+  if(!kickerEl) return;
+  const total = deck && deck.cards ? deck.cards.length : 0;
+  const n = total ? Math.min(deckIndex+1, total) : 0;
+  kickerEl.textContent = `MODULE ${activeModuleNo} · CARD ${n} OF ${total}`;
+}
+
+function updateRewind(){
+  if(!rewindBtn) return;
+  const disabled = !rewindHistory.length || replayMode || isSeedShelf();
+  rewindBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+}
+
+function updateActionState(){
+  const canAct = !replayMode && !isSeedShelf();
+  if(actionButtons.review) actionButtons.review.setAttribute('aria-disabled', canAct ? 'false' : 'true');
+  if(actionButtons.mastered) actionButtons.mastered.setAttribute('aria-disabled', canAct ? 'false' : 'true');
+  updateRewind();
+}
+
+let resizeTimer;
+addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{ fitFace(faceFront); fitFace(faceBack); }, 80);
+});
 
 function flipCard(e){
   if(e) e.stopPropagation();
@@ -497,10 +565,12 @@ async function reportWrongCard(event, btn){
 async function enterReplay(){
   if(!activeShelf) return;
   replayMode = true;
+  rewindHistory.length = 0;
+  busy = false;
   if(replayBtn) replayBtn.classList.remove('show');
-  // hide trays immediately
-  if(traysRow) traysRow.style.display='none';
-  if(dragTipEl){ dragTipEl.style.display='flex'; dragTipEl.textContent='replay — swipe up to continue ↺'; }
+  if(deckHint) deckHint.textContent = 'replay — swipe up to continue ↺';
+  if(actionsRow) actionsRow.style.display='flex';
+  updateActionState();
   await loadDeck(activeShelf.shelf_id, true);
 }
 window.enterReplay = enterReplay;
@@ -567,7 +637,7 @@ topCard.addEventListener('pointermove', (e)=>{
   const cly = Math.max(-160, Math.min(160, dy));
   topCard.style.transform=`translate(${clx}px, ${cly}px) rotate(${rot}deg)`;
   Object.values(zones).forEach(z=> z && z.classList.remove('on'));
-  Object.values(trays).forEach(t=> t && (t.className='tray'));
+  Object.values(actionButtons).forEach(b=> b && b.classList.remove('hover-review','hover-mastered'));
   const hoverX=32, hoverY=32;
   if(replayMode){
     // replay: only upward swipe matters, show replay hint when dragging up
@@ -576,9 +646,10 @@ topCard.addEventListener('pointermove', (e)=>{
     }
     return;
   }
+  if(isSeedShelf()) return;
   if(lockedAxis==='x' || (!lockedAxis && Math.abs(dx) > Math.abs(dy))){
-    if(dx < -hoverX){ if(zones.review) zones.review.classList.add('on'); if(trays.review) trays.review.className='tray hover-review'; if(dx>-36 && navigator.vibrate) navigator.vibrate(10); }
-    else if(dx > hoverX){ if(zones.mastered) zones.mastered.classList.add('on'); if(trays.mastered) trays.mastered.className='tray hover-mastered'; if(dx<36 && navigator.vibrate) navigator.vibrate(10); }
+    if(dx < -hoverX){ if(zones.review) zones.review.classList.add('on'); if(actionButtons.review) actionButtons.review.classList.add('hover-review'); if(dx>-36 && navigator.vibrate) navigator.vibrate(10); }
+    else if(dx > hoverX){ if(zones.mastered) zones.mastered.classList.add('on'); if(actionButtons.mastered) actionButtons.mastered.classList.add('hover-mastered'); if(dx<36 && navigator.vibrate) navigator.vibrate(10); }
   }
 }, {passive:false});
 topCard.addEventListener('pointerup', (e)=>{
@@ -586,7 +657,7 @@ topCard.addEventListener('pointerup', (e)=>{
   dragging=false;
   topCard.classList.remove('dragging');
   Object.values(zones).forEach(z=> z && z.classList.remove('on'));
-  Object.values(trays).forEach(t=> t && (t.className='tray'));
+  Object.values(actionButtons).forEach(b=> b && b.classList.remove('hover-review','hover-mastered'));
   if(isSeedShelf()){
     const upThresh = 84;
     if(dy < -upThresh && Math.abs(dy) > Math.abs(dx)){
@@ -626,62 +697,88 @@ topCard.addEventListener('pointerup', (e)=>{
 topCard.addEventListener('pointercancel', ()=>{
   dragging=false; topCard.classList.remove('dragging'); topCard.style.transform=''; dx=0; dy=0; lockedAxis=null; scrollableEl=null;
   Object.values(zones).forEach(z=> z && z.classList.remove('on'));
-  Object.values(trays).forEach(t=> t && (t.className='tray'));
+  Object.values(actionButtons).forEach(b=> b && b.classList.remove('hover-review','hover-mastered'));
 });
 }
 
 function isSeedShelf(){ return activeShelf && (activeShelf.is_seed || String(activeShelf.shelf_id).startsWith('seed_')); }
+
 async function file(kind){
-  if(replayMode || isSeedShelf()) return; // disabled in replay and for demo seeds
+  if(busy || replayMode || isSeedShelf()) return;
   const card=currentCard();
   if(!card) return;
   const moves={ review:'translateX(-160%) rotate(-16deg)', mastered:'translateX(160%) rotate(16deg)' };
-  const pulse={ review:'pulse-review', mastered:'pulse-mastered' };
   if(!moves[kind]) return;
+  const i = deckIndex;
+  const prev = card.status || 'unfiled';
+  busy = true;
+  topCard.classList.remove('no-anim');
   topCard.style.transition='transform .38s cubic-bezier(.2,0,0,1), opacity .32s';
   topCard.style.transform=moves[kind];
   topCard.style.opacity='0';
-  if(trays[kind]) trays[kind].classList.add(pulse[kind]);
-  setTimeout(()=>{ if(trays[kind]) trays[kind].className='tray'; }, 500);
   try{
     const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/file`, {method:'POST', headers:{'Content-Type':'application/json', ...uidHeaders()}, body: JSON.stringify({post_id: card.post_id, slide_index: card.slide_index, status: kind})});
-    if(res.status===401){ handleUnauthorized(); return; }
-  }catch(e){ console.error('file', e); }
-  try{
-    const shelvesRes = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/shelves`, {headers: uidHeaders()});
-    if(shelvesRes.status===401){ handleUnauthorized(); return; }
-    const ssText = await shelvesRes.text();
-    const ss = JSON.parse(ssText);
-    // update activeShelf fill locally and also update library book progress
-    const updated = ss.find(s=>s.shelf_id===activeShelf.shelf_id);
-    if(updated){
-      activeShelf.fill_pct = updated.fill_pct;
-      const cap = document.querySelector(`.spine[data-shelf="${activeShelf.shelf_id}"] .fillcap`);
-      if(cap) cap.style.setProperty('--fill-pct', Math.round(updated.fill_pct*100)+'%');
-      // also refresh books for library progress (but keep bookView)
-      // quick update without full re-render: find book and recompute
-      const b = books.find(bk=> String(bk.syllabus_id)===String(activeShelf.syllabus_id));
-      if(b){
-        // recalc from fresh shelves
-        const scoped = ss.filter(s=> String(s.syllabus_id)===String(b.syllabus_id));
-        const total = scoped.reduce((a,s)=>a+s.total_slides,0);
-        const mastered = scoped.reduce((a,s)=>a+s.mastered_count,0);
-        b.total_slides = total; b.mastered_count = mastered; b.fill_pct = total? mastered/total:0;
-      }
-    }
-  }catch{}
-  setTimeout(()=>{
-    if(!topCard) return;
-    topCard.style.transition='none';
+    if(res.status===401){ handleUnauthorized(); busy=false; return; }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    card.status = kind;
+    if(deck.progress) deck.progress[card.slide_index] = kind;
+    rewindHistory.push({cardKey: card.card_key, deckIndex: i, prevStatus: prev, kind});
+    if(rewindHistory.length > 50) rewindHistory.shift();
+    updateRewind();
+    renderSegs();
+  }catch(e){
+    console.error('file', e);
+    topCard.classList.add('no-anim');
     topCard.style.transform='';
     topCard.style.opacity='1';
-    flipped=false;
-    if(flipInner) flipInner.classList.remove('flipped');
     void topCard.offsetWidth;
     topCard.style.transition='';
-    deckIndex++;
+    topCard.classList.remove('no-anim');
+    busy=false;
+    return;
+  }
+  setTimeout(()=>{
+    if(!topCard){ busy=false; return; }
+    deckIndex = Math.min(i+1, deck.cards.length-1);
     renderStack();
+    if(i === deck.cards.length-1 && deckHint) deckHint.textContent = 'Module cleared. Rewind to look again.';
+    busy=false;
+    updateActionState();
   }, 380);
+}
+
+async function rewindCard(){
+  if(busy || replayMode || isSeedShelf() || !rewindHistory.length) return;
+  const h = rewindHistory[rewindHistory.length-1];
+  const card = deck && deck.cards ? deck.cards.find(c=> String(c.card_key)===String(h.cardKey)) : null;
+  if(!card){ rewindHistory.pop(); updateRewind(); return; }
+  busy = true;
+  try{
+    const res = await fetch(`${window.STUDYREEL_BACKEND}/api/v1/file`, {method:'POST', headers:{'Content-Type':'application/json', ...uidHeaders()}, body: JSON.stringify({post_id: card.post_id, slide_index: card.slide_index, status: h.prevStatus})});
+    if(res.status===401){ handleUnauthorized(); busy=false; return; }
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    rewindHistory.pop();
+    card.status = h.prevStatus;
+    if(deck.progress) deck.progress[card.slide_index] = h.prevStatus;
+    deckIndex = h.deckIndex;
+    flipped = false;
+    if(flipInner) flipInner.classList.remove('flipped');
+    topCard.classList.add('no-anim');
+    topCard.style.transition='none';
+    topCard.style.transform = h.kind === 'mastered' ? 'translateX(160%) rotate(16deg)' : 'translateX(-160%) rotate(-16deg)';
+    topCard.style.opacity='0';
+    renderStack(false);
+    void topCard.offsetWidth;
+    topCard.classList.remove('no-anim');
+    topCard.style.transition='';
+    topCard.style.transform='';
+    topCard.style.opacity='1';
+    if(deckHint) deckHint.textContent = "swipe left to review again · swipe right when you've got it";
+  }catch(e){
+    console.error('rewind', e);
+  }
+  busy = false;
+  updateActionState();
 }
 
 function toggleTheme(){
@@ -696,6 +793,7 @@ window.toggleTheme = toggleTheme;
 // expose for HTML onclick
 window.flipCard=flipCard;
 window.file=file;
+window.rewindCard=rewindCard;
 window.reportWrongCard=reportWrongCard;
 
 function isDeckOpen(){

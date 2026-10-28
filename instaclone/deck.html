@@ -150,6 +150,84 @@
   #replayBtn{display:none; margin-top:10px; padding:10px 16px; border-radius:9999px; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:700; font-size:12px; border:none; cursor:pointer; box-shadow:0 4px 12px rgba(56,189,248,0.3);}
   #replayBtn.show{display:inline-block;}
   #uploadLink{margin-top:10px; padding:8px 14px; border-radius:9999px; background:linear-gradient(135deg,var(--cyan),var(--indigo)); color:white; font-weight:600; font-size:12px; text-decoration:none; display:inline-block;}
+
+  /* ---- Inside a module: deck mode ---- */
+  body.deck-open{padding:0; min-height:100dvh; display:flex; justify-content:center;}
+  body.deck-open .wrap{max-width:420px; min-height:100dvh; display:flex; flex-direction:column;}
+  body.deck-open .topbar,
+  body.deck-open #libraryView,
+  body.deck-open #accountBadge,
+  body.deck-open .dragtip{display:none !important;}
+  body.deck-open #bookView{
+    display:flex; flex-direction:column; gap:14px; width:100%; height:100dvh;
+    padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .dk-top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0;}
+  .dk-back{display:flex; align-items:center; gap:6px; min-height:44px; padding:0 16px 0 10px; border-radius:22px; background:var(--surface); border:1px solid var(--border); color:var(--text); font:600 14px 'Inter',sans-serif; cursor:pointer; flex-shrink:0;}
+  .dk-book{font-size:13px; font-weight:600; color:#cfd8e6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right;}
+  .dk-mod{display:flex; align-items:center; gap:12px; flex-shrink:0; min-width:0;}
+  .dk-num{width:46px; height:46px; border-radius:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font:700 28px 'Fraunces',serif; color:#fff; background:linear-gradient(160deg,#1f6f5c,#0f3d33);}
+  .dk-kicker{font-size:11px; font-weight:700; letter-spacing:.12em; color:#9fb0c8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .dk-name{font:600 23px/1.1 'Fraunces',serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .dk-segs{display:flex; gap:4px; padding:2px 0; flex-shrink:0;}
+  .dk-segs i{flex:1; height:8px; border-radius:4px; background:#2a3a58; transition:background .25s, box-shadow .25s;}
+  .dk-segs i.got{background:var(--green);}
+  .dk-segs i.review{background:var(--amber);}
+  .dk-segs i.cur{box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--cyan);}
+
+  .stack-area{position:relative; flex:1; min-height:0; height:auto; touch-action:none; display:flex; flex-direction:column;}
+  .stack-area::after{content:''; position:absolute; left:14px; right:14px; bottom:-8px; height:40px; border-radius:0 0 14px 14px; background:#d9cdb0; opacity:.55; z-index:0;}
+  .card{position:absolute; inset:0 0 6px 0; z-index:1; border-radius:16px; display:flex; flex-direction:column; perspective:1200px; touch-action:none; transition:transform .38s cubic-bezier(.2,0,0,1), opacity .32s; height:auto; min-height:0; box-shadow:none;}
+  .card.no-anim{transition:none !important;}
+  .card.back2{z-index:0; transform:scale(.94) translateY(14px) rotate(-2deg); opacity:.7; box-shadow:none;}
+  .card.back3{z-index:0; transform:scale(.88) translateY(26px) rotate(2deg); opacity:.4; box-shadow:none;}
+  .card.top{z-index:3; cursor:grab;}
+  .card.top.dragging{cursor:grabbing; transition:none;}
+  .flipinner{position:relative; width:100%; height:100%; transform-style:preserve-3d; transition:transform .5s cubic-bezier(.4,.2,.2,1);}
+  .flipinner.flipped{transform:rotateY(180deg);}
+  .face{position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:16px; overflow:hidden; display:flex; flex-direction:column; background-color:var(--card); color:var(--card-ink); background-image:repeating-linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.05) 1px, transparent 1px, transparent 28px); box-shadow:0 18px 40px rgba(0,0,0,.4);}
+  .face.back{transform:rotateY(180deg); background-color:#eee0c4;}
+  .punch{position:absolute; top:18px; left:18px; width:11px; height:11px; border-radius:50%; background:var(--bg); box-shadow:inset 0 1px 3px rgba(0,0,0,.4);}
+  .ribbon{position:absolute; top:0; right:22px; width:16px; height:34px; background:linear-gradient(180deg,#e24b4a,#b8322f); clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); box-shadow:0 2px 4px rgba(0,0,0,.2);}
+  .cardhead{display:flex; align-items:center; gap:8px; padding:16px 52px 6px 42px; flex-shrink:0;}
+  .tab{font-size:12px; font-weight:700; padding:4px 10px; border-radius:14px; background:rgba(0,0,0,.07); color:var(--card-ink); opacity:1;}
+  .cardbody{flex:1; min-height:0; display:flex; flex-direction:column; padding:8px 26px 16px 42px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; scrollbar-width:thin; scrollbar-color:var(--border) transparent;}
+  .cardbody::-webkit-scrollbar{width:4px;}
+  .cardbody::-webkit-scrollbar-thumb{background:var(--border); border-radius:9999px;}
+  .cardfit{flex:none; margin-block:auto;}
+  .cardfit h2{margin:0 0 .5em; font-family:'Fraunces',serif; font-weight:600; letter-spacing:-.01em; line-height:1.1; color:var(--card-ink);}
+  .cardfit p{margin:0 0 .8em; line-height:1.5; color:#3a2e1f; opacity:1;}
+  .cardfit .spot{padding:.7em .85em; border-radius:12px; background:rgba(0,0,0,.07); line-height:1.45; color:#3a2e1f; margin:0 0 .8em;}
+  .cardfit .spot b{font-weight:700;}
+  .cardfit .code{font-family:'Fira Code',monospace; padding:.8em .9em; border-radius:10px; background:rgba(0,0,0,.88); color:#9ece6a; line-height:1.5; white-space:pre-wrap; word-break:break-word; margin:0 0 .8em; box-shadow:none;}
+  .diagram{display:flex; flex-direction:column; align-items:stretch; gap:.35em; margin:0 0 .8em;}
+  .diagram .node{background:#fffaf0; border:1px solid rgba(0,0,0,.18); border-radius:9px; padding:.5em .7em; font-weight:600; text-align:center; font-size:1em;}
+  .diagram .arrow{text-align:center; line-height:.8; color:#8a5a00; font-size:.9em;}
+  .diagram .edges{font-size:.8em; color:#6b5a3f; text-align:center; margin-top:.3em; word-break:break-word;}
+  .cardfoot{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 20px 14px 42px; border-top:1px dashed rgba(0,0,0,.18); flex-shrink:0; flex-wrap:wrap; font-size:13px; opacity:1;}
+  .weight{display:flex; align-items:center; gap:6px; font-size:13px; color:#4a3d2a;}
+  .weight .dot{width:8px; height:8px; border-radius:4px; background:#4a3d2a; opacity:.28;}
+  .weight .dot.on{opacity:1;}
+  .weight .hy{font-weight:700; color:#8a5a00; font-size:11px;}
+  .flipbtn{display:flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:0 16px; border:0; border-radius:22px; background:rgba(0,0,0,.08); color:var(--card-ink); font:700 14px 'Inter',sans-serif; cursor:pointer;}
+  .cardactions{display:flex; align-items:center; gap:6px;}
+  .reportbtn{background:rgba(165,55,47,.1); border:none; color:#a5372f; font-size:10.5px; cursor:pointer; font-weight:700; padding:10px 10px; border-radius:20px; min-height:44px; display:flex; align-items:center; justify-content:center; touch-action:manipulation;}
+  .reportbtn:disabled{opacity:.6; cursor:default;}
+  .zonehint{position:absolute; inset:0; border-radius:16px; display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:600; font-size:20px; opacity:0; pointer-events:none; transition:opacity .12s; z-index:4;}
+  .zonehint.on{opacity:1;}
+
+  .actions{display:flex; gap:12px; align-items:center; flex-shrink:0;}
+  .act{flex:1; height:62px; border-radius:16px; background:var(--surface); border:1px solid var(--border); color:var(--text); display:flex; align-items:center; justify-content:center; gap:10px; font:700 16px 'Inter',sans-serif; cursor:pointer; min-height:62px;}
+  .act:active{transform:scale(.98);}
+  .act.hover-review{border-color:var(--amber); box-shadow:0 0 0 3px color-mix(in srgb, var(--amber) 25%, transparent);}
+  .act.hover-mastered{border-color:var(--green); box-shadow:0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent);}
+  .act[aria-disabled="true"]{opacity:.45; cursor:default;}
+  .rewind{flex:none; width:62px; height:62px; border-radius:31px; background:var(--panel); border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;}
+  .rewind[aria-disabled="true"]{border-color:#2a3d5f; opacity:.45; cursor:default;}
+  .rewind[aria-disabled="true"] svg{stroke:#6f819d;}
+  .act:focus-visible,.rewind:focus-visible,.flipbtn:focus-visible,.dk-back:focus-visible{outline:3px solid var(--cyan); outline-offset:2px;}
+  .hint{text-align:center; font-size:12.5px; color:var(--muted); min-height:16px; flex-shrink:0;}
+  .stack-area .empty{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; min-height:0; height:100%; margin-top:0; border-radius:16px; animation:none; z-index:5;}
 </style>
 </head>
 <body data-theme="dark">
@@ -200,14 +278,22 @@
     </div>
   </div>
 
-  <!-- Inside a Book -->
+  <!-- Inside a Module -->
   <div id="bookView" style="display:none">
-    <div class="book-toolbar">
-      <button class="backbtn" onclick="showLibrary()">← Library</button>
-      <span class="book-title" id="bookTitle">—</span>
+    <div class="dk-top">
+      <button class="dk-back" type="button" onclick="showLibrary()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Modules
+      </button>
+      <div class="dk-book" id="bookTitle">—</div>
     </div>
-    <div class="shelfscroll"><div class="shelf" id="shelfrow"></div></div>
-    <div class="deckhead"><span class="name" id="shelfName">Loading…</span><span class="hint">drag or tap trays</span></div>
+    <div class="dk-mod">
+      <div class="dk-num" id="moduleNum">1</div>
+      <div style="min-width:0;flex:1">
+        <div class="dk-kicker" id="kicker">MODULE 1 · CARD 1 OF 1</div>
+        <div class="dk-name" id="shelfName">Loading…</div>
+      </div>
+    </div>
+    <div class="dk-segs" id="segs" aria-label="Module progress"></div>
     <div class="stack-area" id="stackArea">
       <div id="emptyMsg" class="empty" style="display:none">
         <div class="empty-icon">📚</div>
@@ -228,11 +314,18 @@
         </div>
       </div>
     </div>
-    <div class="trays">
-      <div class="tray" id="trayReview" onclick="file('review')"><span class="icon">↺</span><span class="lbl">Review</span></div>
-      <div class="tray" id="trayMastered" onclick="file('mastered')"><span class="icon">✓</span><span class="lbl">Got it</span></div>
+    <div class="actions" id="actionsRow">
+      <button class="act" type="button" id="btnReview" onclick="file('review')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5 M11 6l-6 6 6 6"/></svg>Review
+      </button>
+      <button class="rewind" type="button" id="btnRewind" onclick="rewindCard()" aria-label="Bring back the last card" aria-disabled="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+      </button>
+      <button class="act" type="button" id="btnGot" onclick="file('mastered')">
+        Got it<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14 M13 6l6 6-6 6"/></svg>
+      </button>
     </div>
-    <div class="dragtip" id="dragTip">try dragging the card toward a tray</div>
+    <div class="hint" id="deckHint">swipe left to review again · swipe right when you've got it</div>
   </div>
 
   <div class="idbar" id="accountBadge">
@@ -244,7 +337,7 @@
   </div>
 </div>
 <script src="/static/back-nav.js?v=2"></script>
-<script src="/static/deck.js?v=6"></script>
+<script src="/static/deck.js?v=7"></script>
 <script>
 // Service worker was flagged as caching risk — unregister any existing and clear caches to prevent stale deck.js/deck.html on phone
 if('serviceWorker' in navigator){
